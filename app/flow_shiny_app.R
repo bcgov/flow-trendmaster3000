@@ -17,6 +17,7 @@ ui = shiny::fluidPage(
   tags$head(tags$style(
     HTML('#trend_selector {opacity:0.5;}
          #trend_selector:hover{opacity:0.9;}'))),
+  shinyFeedback::useShinyFeedback(),
   titlePanel("Flow Indicator"),
   map_abs_panel,
   card(trend_select_abs_panel)
@@ -29,63 +30,63 @@ server <- function(input, output) {
 
   date_vars = c("Min_7_Day_DoY","DoY_50pct_TotalQ")
 
-  # # Update month selector to show months, if user picks month time-scale
-  # observeEvent(input$time_scale, {
-  #   if(input$time_scale == 'Monthly'){
-  #     updateSelectizeInput(inputId = 'month_selector',
-  #                          choices = month.abb,
-  #                          selected = month.abb[1])
-  #     updateSelectizeInput(inputId = 'user_var_choice',
-  #                          choices = c('Mean Flow' = 'Mean',
-  #                                      'Median Flow' = 'Median',
-  #                                      'Total Flow' = 'Total_Volume_m3')
-  #                          )
-  #   }
-  #   if(input$time_scale == 'Annual'){
-  #     updateSelectizeInput(inputId = 'month_selector',
-  #                          choices = 'All',
-  #                          selected = 'All')
-  #     updateSelectizeInput(inputId = 'user_var_choice',
-  #                          choices = c('Mean Flow' = 'Mean',
-  #                                      'Median Flow' = 'Median',
-  #                                      'Date of 50% Annual Flow' = 'DoY_50pct_TotalQ',
-  #                                      'Minimum Flow (7day)' = 'Min_7_Day',
-  #                                      'Date of Minimum Flow (7day)' = 'Min_7_Day_DoY',
-  #                                      'Total Flow' = 'Total_Volume_m3'))
-  #   }
-  # })
+  # Update month selector to show months, if user picks month time-scale
+  observeEvent(input$scale_selector_radio, {
+    if(input$scale_selector_radio == 'Monthly'){
+      updateSelectizeInput(inputId = 'user_var_choice',
+                           choices = c('Mean Flow' = 'Mean',
+                                       'Median Flow' = 'Median',
+                                       'Total Flow' = 'Total_Volume_m3')
+                           )
+    } else {
+      updateSelectizeInput(inputId = 'user_var_choice',
+                           choices = c('Mean Flow' = 'Mean',
+                                       'Median Flow' = 'Median',
+                                       'Date of 50% Flow' = 'DoY_50pct_TotalQ',
+                                       'Minimum Flow (7day)' = 'Min_7_Day',
+                                       'Date of Minimum Flow (7day)' = 'Min_7_Day_DoY',
+                                       'Minimum Flow (30day)' = 'Min_30_Day',
+                                       'Date of Minimum Flow (30day)' = 'Min_30_Day_DoY',
+                                       'Total Flow' = 'Total_Volume_m3')
+      )
+    }
+
+  })
 
   mk_results = reactive({
-    calculate_MK_results(data = flow_dat_focused(),
+    calculate_MK_results(data = dat_with_metric(),
                          chosen_variable = input$user_var_choice)
   })
 
   flow_dat_with_mk = reactive({
-    flow_dat_focused() %>%
+    dat_with_metric() %>%
       left_join(mk_results())
   })
 
-  output$testytest = DT::renderDT({flow_dat_focused()})
+  output$testytest = DT::renderDT({dat_with_metric()})
 
   stations_sf_with_trend = reactive({
     dat = stations_sf %>%
-      left_join(mk_results())
+      left_join(calculate_MK_results(data = dat_with_metric(),
+                                     chosen_variable = input$user_var_choice))
+
 
     if(input$user_var_choice %in% date_vars){
-      dat %>%
+      dat = dat %>%
         mutate(trend_sig = factor(trend_sig, levels = c("Significant Trend Earlier",
                                                         'Non-Significant Trend Earlier',
                                                         'No Trend',
                                                         'Non-Significant Trend Later',
                                                         'Significant Trend Later')))
     } else {
-      dat %>%
+      dat = dat %>%
         mutate(trend_sig = factor(trend_sig, levels = c("Significant Trend Down",
                                                         'Non-Significant Trend Down',
                                                         'No Trend',
                                                         'Non-Significant Trend Up',
                                                         'Significant Trend Up')))
     }
+    return(dat)
   })
 
   # Set up a reactive value that stores a district's name upon user's click
@@ -119,15 +120,14 @@ server <- function(input, output) {
   output$selected_station = renderText({paste0("Station: ",click_station())})
 
   output$myplot = renderPlot({
-    station_flow_plot(data = flow_dat_focused(),
+    station_flow_plot(data = dat_with_metric(),
                       variable_choice = input$user_var_choice,
                       clicked_station = click_station(),
                       stations_shapefile = stations_sf,
                       slopes = senslope_dat())
   })
 
-  # output$test = DT::renderDT(mk_results())
-  output$test = DT::renderDT(dat_filteredTwo())
+  output$test = DT::renderDT(dat_with_metric())
   output$test_text = renderText(input$filter_interval)
 
   mypal = reactive({
@@ -165,8 +165,7 @@ server <- function(input, output) {
                        position = 'bottomright')
   })
 
-  observeEvent(c(input$user_var_choice,
-                 input$month_selector), {
+  observe({
                    leafletProxy("leafmap") %>%
                      clearMarkers() %>%
                      addCircleMarkers(layerId = ~STATION_NUMBER,

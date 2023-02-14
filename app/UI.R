@@ -7,46 +7,39 @@ library(sf)
 library(EnvStats)
 library(data.table)
 library(tidyverse)
+library(tidyhydat)
 library(lubridate)
 library(ggtext)
 library(feather)
+library(shinyFeedback)
 
 # Trend selection options
 trend_select_options_tab = wellPanel(
   fluidRow(
     column(width = 6,
-           # radioButtons(inputId = 'time_scale',
-           #              label = 'Time Scale',
-           #              choices = c('Annual','Monthly','Custom Timeframe'),
-           #              selected = 'Annual'
-           # )
-           selectizeInput(inputId = 'time_selector',
-                          label = 'Time Selector',
-                          multiple = F,
-                          choices = c('Annual' = 'All',
-                                      month.abb),
-                          selected = 'Annual')
-           # uiOutput('time_selector_ui')
+           radioButtons(inputId = 'scale_selector_radio',
+                              label = 'Time Scale',
+                              choices = c('Annual',
+                                          'Monthly',
+                                          'Seasonal',
+                                          'Custom Date Range'),
+                              selected = 'Annual')
     ),
     column(width = 6,
-           # selectizeInput(inputId = 'month_selector',
-           #                label = 'Month',
-           #                multiple = F,
-           #                choices = 'All',
-           #                selected = 'All'),
-           checkboxInput(inputId = 'custom_daterange',
-                         label = 'Custom Date Range'),
-          # uiOutput('month_selector_UI'),
-          uiOutput('custom_daterange_selectors')
+           uiOutput('month_selector_ui'),
+           uiOutput('season_selector_ui'),
+           uiOutput('custom_range_selector_ui')
     )
   ),
   selectizeInput(inputId = 'user_var_choice',
                  label = 'Trend to Display',
                  choices = c('Mean Flow' = 'Mean',
                              'Median Flow' = 'Median',
-                             'Date of 50% Annual Flow' = 'DoY_50pct_TotalQ',
+                             'Date of 50% Flow' = 'DoY_50pct_TotalQ',
                              'Minimum Flow (7day)' = 'Min_7_Day',
                              'Date of Minimum Flow (7day)' = 'Min_7_Day_DoY',
+                             'Minimum Flow (30day)' = 'Min_30_Day',
+                             'Date of Minimum Flow (30day)' = 'Min_30_Day_DoY',
                              'Total Flow' = 'Total_Volume_m3'),
                  selected = 'Mean',
                  width = '100%'),
@@ -70,9 +63,9 @@ trend_select_abs_panel = absolutePanel(
   tabsetPanel(
     id = 'tabset',
     tabPanel('Trend Options',trend_select_options_tab),
-    tabPanel('Station Plot',station_plot_tab),
-    tabPanel('Datview',DT::DTOutput('test')),
-    tabPanel('Test Text', textOutput('test_text'))
+    tabPanel('Station Plot',station_plot_tab)
+    # tabPanel('Datview',DT::DTOutput('test')),
+    # tabPanel('Test Text', textOutput('test_text'))
   )
 )
 
