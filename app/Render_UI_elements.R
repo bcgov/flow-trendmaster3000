@@ -33,7 +33,7 @@ output$custom_range_selector_ui = renderUI({
   tagList(
   fluidRow(
     column(width = 6,
-           selectizeInput(inputId = 'start_month',
+           numericInput(inputId = 'start_month',
                           label = 'Start Month',
                           min = 1, max = 12,
                           value = NA)

@@ -24,14 +24,17 @@ data %>%
 
 
 station_flow_plot = function(data,variable_choice,clicked_station,stations_shapefile,slopes){
-
+# browser()
   label.frame = data.frame(varname = c('Mean','Median',
                                        'DoY_50pct_TotalQ','Min_7_Day',
-                                       'Min_7_Day_DoY','Total_Volume_m3'),
+                                       'Min_7_Day_DoY','Min_30_Day',
+                                       'Min_30_Day_DoY','Total_Volume_m3'),
                            labels = c('Mean Flow','Median Flow',
                                       'Date of 50% Annual Flow',
                                       'Minimum Flow (7day)',
                                       'Date of Minimum Flow (7day)',
+                                      'Minimum Flow (30day)',
+                                      'Date of Minimum Flow (30day)',
                                       'Total Flow'))
 
   if(clicked_station == 'no_selection'){
@@ -41,16 +44,23 @@ station_flow_plot = function(data,variable_choice,clicked_station,stations_shape
     } else {
 
       plot_units = fcase(
-        variable_choice %in% c('Mean','Median','Total_Volume_m3','Min_7_Day') , '(m<sup>3</sup>/second)',
-        variable_choice %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY'), " "
+        variable_choice %in% c('Mean','Median','Total_Volume_m3','Min_7_Day','Min_30_Day') , '(m<sup>3</sup>/second)',
+        variable_choice %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY','Min_30_Day_DoY'), " "
       )
 
+      station_name = unique(stations_shapefile[stations_shapefile$STATION_NUMBER == clicked_station,]$STATION_NAME)
+
       data %>%
+        ungroup() %>%
         filter(STATION_NUMBER == clicked_station) %>%
-        left_join(stations_shapefile %>% st_drop_geometry() %>% dplyr::select(STATION_NUMBER,STATION_NAME)) %>%
+        left_join(stations_shapefile %>%
+                    st_drop_geometry() %>%
+                    dplyr::select(STATION_NUMBER,STATION_NAME),
+                  by = 'STATION_NUMBER') %>%
         #Start of ggplot code block. This allows us to assign a variable
         # to the plot title.
-        {ggplot(.) +
+       # {
+          ggplot() +
             geom_point(aes(y = values, x = Year)) +
             geom_line(aes(y = values, x = Year)) +
             geom_line(aes(y = SlopePreds, x = Year),
@@ -58,8 +68,8 @@ station_flow_plot = function(data,variable_choice,clicked_station,stations_shape
                       linetype = 1,
                       linewidth = 2,
                       alpha = 0.75,
-                      slopes) +
-            labs(title = paste0(unique(.$STATION_NAME)," (",unique(.$STATION_NUMBER),")"),
+                      data = slopes) +
+            labs(title = paste0(station_name," (",unique(clicked_station),")"),
                  subtitle = paste0(unique(slopes$trend_sig),
                                    " (Sen slope:",round(slopes$Slope,3),
                                    ", p-value ~ ",round(unique(slopes$P_value),2),")")) +
@@ -69,6 +79,6 @@ station_flow_plot = function(data,variable_choice,clicked_station,stations_shape
             theme(axis.title.y = element_markdown(size = 14),
                   axis.title.x = element_text(size = 14),
                   axis.text = element_text(size = 11))
-        } #End of ggplot code block.
+        #} #End of ggplot code block.
     }
 }

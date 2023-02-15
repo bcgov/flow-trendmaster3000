@@ -67,9 +67,7 @@ server <- function(input, output) {
 
   stations_sf_with_trend = reactive({
     dat = stations_sf %>%
-      left_join(calculate_MK_results(data = dat_with_metric(),
-                                     chosen_variable = input$user_var_choice))
-
+      left_join(mk_results())
 
     if(input$user_var_choice %in% date_vars){
       dat = dat %>%
@@ -97,14 +95,14 @@ server <- function(input, output) {
     flow_dat_with_mk() %>%
       filter(STATION_NUMBER == click_station()) %>%
       left_join(mk_results()) %>%
-      mutate(SlopePreds = Intercept+Slope*Year) %>%
-      dplyr::select(STATION_NUMBER,
-                    SlopePreds,
-                    Slope,
-                    trend_sig,
-                    P_value,
-                    Month,
-                    Year)
+      mutate(SlopePreds = Intercept+Slope*Year)
+      # dplyr::select(STATION_NUMBER,
+      #               SlopePreds,
+      #               Slope,
+      #               trend_sig,
+      #               P_value,
+      #               Month,
+      #               Year)
   })
 
   # Watch for a click on the leaflet map. Once clicked...
