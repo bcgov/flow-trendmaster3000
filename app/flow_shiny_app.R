@@ -37,7 +37,7 @@ server <- function(input, output) {
                            choices = c('Mean Flow' = 'Mean',
                                        'Median Flow' = 'Median',
                                        'Total Flow' = 'Total_Volume_m3')
-                           )
+      )
     } else {
       updateSelectizeInput(inputId = 'user_var_choice',
                            choices = c('Mean Flow' = 'Mean',
@@ -96,13 +96,6 @@ server <- function(input, output) {
       filter(STATION_NUMBER == click_station()) %>%
       left_join(mk_results()) %>%
       mutate(SlopePreds = Intercept+Slope*Year)
-      # dplyr::select(STATION_NUMBER,
-      #               SlopePreds,
-      #               Slope,
-      #               trend_sig,
-      #               P_value,
-      #               Month,
-      #               Year)
   })
 
   # Watch for a click on the leaflet map. Once clicked...
@@ -117,12 +110,22 @@ server <- function(input, output) {
 
   output$selected_station = renderText({paste0("Station: ",click_station())})
 
+  date_choice_label = reactive({
+    switch(input$scale_selector_radio,
+           Annual = 'Based on Data from: Entire year',
+           Monthly = paste0('Based on Data from: ',month.name[as.numeric(input$time_selector)]),
+           Seasonal = paste0('Based on Data from: ',str_to_title(input$season_selector)),
+           `Select Dates` = paste0('Based on Data from: ',month.abb[input$start_month],'-',input$start_day,' to ',month.abb[input$end_month],'-',input$end_day)
+    )
+  })
+
   output$myplot = renderPlot({
     station_flow_plot(data = dat_with_metric(),
                       variable_choice = input$user_var_choice,
                       clicked_station = click_station(),
                       stations_shapefile = stations_sf,
-                      slopes = senslope_dat())
+                      slopes = senslope_dat(),
+                      caption_label = date_choice_label())
   })
 
   output$test = DT::renderDT(dat_with_metric())
@@ -138,16 +141,16 @@ server <- function(input, output) {
                              'Non-Significant Trend Later',
                              'Significant Trend Later'),
                   ordered = T)
-      } else {
-    colorFactor(palette = 'RdBu',
-                domain = mk_results()$trend_sig,
-                levels = c("Significant Trend Down",
-                           'Non-Significant Trend Down',
-                           'No Trend',
-                           'Non-Significant Trend Up',
-                           'Significant Trend Up'),
-                ordered = T)
-      }
+    } else {
+      colorFactor(palette = 'RdBu',
+                  domain = mk_results()$trend_sig,
+                  levels = c("Significant Trend Down",
+                             'Non-Significant Trend Down',
+                             'No Trend',
+                             'Non-Significant Trend Up',
+                             'Significant Trend Up'),
+                  ordered = T)
+    }
   })
 
   output$leafmap <- renderLeaflet({
@@ -164,23 +167,23 @@ server <- function(input, output) {
   })
 
   observe({
-                   leafletProxy("leafmap") %>%
-                     clearMarkers() %>%
-                     addCircleMarkers(layerId = ~STATION_NUMBER,
-                                      color = 'black',
-                                      fillColor = ~mypal()(trend_sig),
-                                      radius = 8,
-                                      weight = 1,
-                                      fillOpacity = 0.75,
-                                      label = ~paste0(STATION_NAME, " (",STATION_NUMBER,") - ",HYD_STATUS),
-                                      data = stations_sf_with_trend()) %>%
-                     removeControl("legend") %>%
-                     addLegend(pal = mypal(),
-                               values = ~trend_sig,
-                               title = 'Mann-Kendall Trend Result',
-                               data = stations_sf_with_trend(),
-                               layerId = 'legend')
-                 })
+    leafletProxy("leafmap") %>%
+      clearMarkers() %>%
+      addCircleMarkers(layerId = ~STATION_NUMBER,
+                       color = 'black',
+                       fillColor = ~mypal()(trend_sig),
+                       radius = 8,
+                       weight = 1,
+                       fillOpacity = 0.75,
+                       label = ~paste0(STATION_NAME, " (",STATION_NUMBER,") - ",HYD_STATUS),
+                       data = stations_sf_with_trend()) %>%
+      removeControl("legend") %>%
+      addLegend(pal = mypal(),
+                values = ~trend_sig,
+                title = 'Mann-Kendall Trend Result',
+                data = stations_sf_with_trend(),
+                layerId = 'legend')
+  })
 }
 
 # Run the application

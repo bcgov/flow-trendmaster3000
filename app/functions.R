@@ -23,7 +23,7 @@ data %>%
 }
 
 
-station_flow_plot = function(data,variable_choice,clicked_station,stations_shapefile,slopes){
+station_flow_plot = function(data,variable_choice,clicked_station,stations_shapefile,slopes,caption_label){
 # browser()
   label.frame = data.frame(varname = c('Mean','Median',
                                        'DoY_50pct_TotalQ','Min_7_Day',
@@ -57,9 +57,6 @@ station_flow_plot = function(data,variable_choice,clicked_station,stations_shape
                     st_drop_geometry() %>%
                     dplyr::select(STATION_NUMBER,STATION_NAME),
                   by = 'STATION_NUMBER') %>%
-        #Start of ggplot code block. This allows us to assign a variable
-        # to the plot title.
-       # {
           ggplot() +
             geom_point(aes(y = values, x = Year)) +
             geom_line(aes(y = values, x = Year)) +
@@ -72,13 +69,13 @@ station_flow_plot = function(data,variable_choice,clicked_station,stations_shape
             labs(title = paste0(station_name," (",unique(clicked_station),")"),
                  subtitle = paste0(unique(slopes$trend_sig),
                                    " (Sen slope:",round(slopes$Slope,3),
-                                   ", p-value ~ ",round(unique(slopes$P_value),2),")")) +
+                                   ", p-value ~ ",round(unique(slopes$P_value),2),")"),
+                 caption = caption_label) +
             labs(y = paste(label.frame[label.frame$varname == variable_choice,]$labels,plot_units,sep = " ")) +
             scale_x_continuous(breaks = scales::pretty_breaks()) +
             theme_minimal() +
             theme(axis.title.y = element_markdown(size = 14),
                   axis.title.x = element_text(size = 14),
                   axis.text = element_text(size = 11))
-        #} #End of ggplot code block.
     }
 }

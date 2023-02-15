@@ -29,7 +29,7 @@ output$season_selector_ui = renderUI({
 
 output$custom_range_selector_ui = renderUI({
   req(input$scale_selector_radio)
-  if(!input$scale_selector_radio == 'Custom Date Range') return(NULL)
+  if(!input$scale_selector_radio == 'Select Dates') return(NULL)
   tagList(
   fluidRow(
     column(width = 6,

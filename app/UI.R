@@ -22,7 +22,7 @@ trend_select_options_tab = wellPanel(
                               choices = c('Annual',
                                           'Monthly',
                                           'Seasonal',
-                                          'Custom Date Range'),
+                                          'Select Dates'),
                               selected = 'Annual')
     ),
     column(width = 6,

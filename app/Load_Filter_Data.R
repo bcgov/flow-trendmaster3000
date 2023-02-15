@@ -1,9 +1,9 @@
 # Workflow of filtering data as follows:
 
-# 1. Read in data => 'flow_dat_inclusive'
-# 2. Filter: annual or monthly => 'flow_dat'
-# 3. Filter: variable of choice => 'flow_dat_focused'
-# 4. Filter: recent, medium-term, or all data => 'flow_dat_filtered'
+# 1. Read in data => 'flow_dat_daily'
+# 2. Filter years to include: recent (last 10 years), medium-term (1990), or all data => 'dat_filtered'
+# 2. Filter portions of each year to include => 'dat_filteredTwo'
+# 3. Filter: variable of choice => 'dat_with_metric'
 
 
 # Load in data ----------------------------------------------------
@@ -17,33 +17,22 @@ flow_dat_daily = read_feather('www/all_flow_dat.feather') %>%
 
 # First filtering cut: time periods -------------------------------
 dat_filtered = reactive({
-  if(input$user_period_choice == '2010+'){
-    return(flow_dat_daily %>% filter(Year >= 2010))
-  }
-  if(input$user_period_choice == '1990+'){
-    return(flow_dat_daily %>% filter(Year >= 1990))
-  }
-  if(input$user_period_choice == 'all'){
-    return(flow_dat_daily)
-  }
+  switch(input$user_period_choice,
+         `2010+` = flow_dat_daily %>% filter(Year >= 2010),
+         `1990+` = flow_dat_daily %>% filter(Year >= 1990),
+         `all` = flow_dat_daily
+  )
 })
-
-# # Second filter cut: annual, monthly, or other time range ----------
-# dat_filteredTwo = reactive({
-#   dat_filtered() %>%
-#     filter(Month == input$time_selector) %>%
-#     dplyr::select(STATION_NUMBER,Year,Month,values = !!sym(input$user_var_choice))
-# })
 
 dat_filteredTwo = reactive({
 
   withProgress(message = 'applying date filter', {
 
-    # Don't start solving this reactive expression until we have a value
-    # for the scale selection radio buttons! This delay avoids errors
-    # while these buttons are loading.
+    # req() tells the app to not start solving this reactive expression until
+    # we have a value for the scale selection radio buttons! This delay
+    # avoids errors while these buttons are loading.
     req(input$scale_selector_radio)
-    if(input$scale_selector_radio == 'Custom Date Range'){
+    if(input$scale_selector_radio == 'Select Dates'){
       req(input$start_month, input$start_day, input$end_month, input$end_day)
     }
     #In the case of annual timescale, do no filtering here.
@@ -76,7 +65,7 @@ dat_filteredTwo = reactive({
     }
 
     #If custom time scale, use it here to filter data.
-    if(input$scale_selector_radio == 'Custom Date Range'){
+    if(input$scale_selector_radio == 'Select Dates'){
       # Only start calculating this reactive once we have all 4 inputs.
       req(input$start_month, input$start_day, input$end_month, input$end_day)
 
