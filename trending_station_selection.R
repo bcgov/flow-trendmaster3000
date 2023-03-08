@@ -29,10 +29,15 @@ stations_all_bc_list <- unique(hy_annual_stats(prov_terr_state_loc = "BC") %>%
                                  filter(Parameter == "Flow") %>%
                                  pull(STATION_NUMBER))
 
+if(!dir.exists('data')) dir.create('data')
+
+if(!file.exists('data/hydat_daily_all.rds')){
 ## Get HYDAT data for all flow stations
-# hydat_daily_all <- hy_daily_flows(station_number = stations_all_bc_list)
+hydat_daily_all <- hy_daily_flows(station_number = stations_all_bc_list)
 # saveRDS(hydat_daily_all, file = "station_selection/hydat_data/hydat_daily_all.rds")
-# saveRDS(hydat_daily_all, file = 'data/hydat_daily_all.rds')
+saveRDS(hydat_daily_all, file = 'data/hydat_daily_all.rds')
+}
+
 hydat_daily_all <- read_rds(file = "data/hydat_daily_all.rds")
 
 ## Filter stations for n complete years
