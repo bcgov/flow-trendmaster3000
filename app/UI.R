@@ -33,15 +33,13 @@ trend_select_options_tab = wellPanel(
   ),
   selectizeInput(inputId = 'user_var_choice',
                  label = 'Trend to Display',
-                 choices = c('Mean Flow' = 'Mean',
-                             'Median Flow' = 'Median',
+                 choices = c('Average Flow' = 'Median',
                              'Date of 50% Flow' = 'DoY_50pct_TotalQ',
                              'Minimum Flow (7day)' = 'Min_7_Day',
                              'Date of Minimum Flow (7day)' = 'Min_7_Day_DoY',
                              'Minimum Flow (30day)' = 'Min_30_Day',
-                             'Date of Minimum Flow (30day)' = 'Min_30_Day_DoY',
-                             'Total Flow' = 'Total_Volume_m3'),
-                 selected = 'Mean',
+                             'Date of Minimum Flow (30day)' = 'Min_30_Day_DoY'),
+                 selected = 'Median',
                  width = '100%'),
   radioButtons(inputId = 'user_period_choice',
                label = 'Date Cutoff',
@@ -55,6 +53,11 @@ trend_select_options_tab = wellPanel(
 station_plot_tab = wellPanel(
   plotOutput('myplot',height=225)
 )
+
+station_hydrograph_tab = wellPanel(
+  plotOutput('my_hydrograph',height=225)
+)
+
 # Absolute Panel with trend selection.
 trend_select_abs_panel = absolutePanel(
   id = 'trend_selector',
@@ -63,9 +66,8 @@ trend_select_abs_panel = absolutePanel(
   tabsetPanel(
     id = 'tabset',
     tabPanel('Trend Options',trend_select_options_tab),
-    tabPanel('Station Plot',station_plot_tab)
-    # tabPanel('Datview',DT::DTOutput('test')),
-    # tabPanel('Test Text', textOutput('test_text'))
+    tabPanel('Station Trend Plot',station_plot_tab),
+    tabPanel('Station Hydrograph',station_hydrograph_tab)
   )
 )
 

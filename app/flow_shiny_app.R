@@ -34,20 +34,16 @@ server <- function(input, output) {
   observeEvent(input$scale_selector_radio, {
     if(input$scale_selector_radio == 'Monthly'){
       updateSelectizeInput(inputId = 'user_var_choice',
-                           choices = c('Mean Flow' = 'Mean',
-                                       'Median Flow' = 'Median',
-                                       'Total Flow' = 'Total_Volume_m3')
+                           choices = c('Average Flow' = 'Median')
       )
     } else {
       updateSelectizeInput(inputId = 'user_var_choice',
-                           choices = c('Mean Flow' = 'Mean',
-                                       'Median Flow' = 'Median',
+                           choices = c('Average Flow' = 'Median',
                                        'Date of 50% Flow' = 'DoY_50pct_TotalQ',
                                        'Minimum Flow (7day)' = 'Min_7_Day',
                                        'Date of Minimum Flow (7day)' = 'Min_7_Day_DoY',
                                        'Minimum Flow (30day)' = 'Min_30_Day',
-                                       'Date of Minimum Flow (30day)' = 'Min_30_Day_DoY',
-                                       'Total Flow' = 'Total_Volume_m3')
+                                       'Date of Minimum Flow (30day)' = 'Min_30_Day_DoY')
       )
     }
 
@@ -103,19 +99,21 @@ server <- function(input, output) {
   observeEvent(input$leafmap_marker_click, {
     # Capture the info of the clicked polygon. We use this for filtering.
     click_station(input$leafmap_marker_click$id)
+    if(!input$tabset == 'Station Hydrograph'){
     shiny::updateTabsetPanel(
       inputId = 'tabset',
-      selected = 'Station Plot')
+      selected = 'Station Trend Plot')
+    }
   })
 
   output$selected_station = renderText({paste0("Station: ",click_station())})
 
   date_choice_label = reactive({
     switch(input$scale_selector_radio,
-           Annual = 'Based on Data from: Entire year',
-           Monthly = paste0('Based on Data from: ',month.name[as.numeric(input$time_selector)]),
-           Seasonal = paste0('Based on Data from: ',str_to_title(input$season_selector)),
-           `Select Dates` = paste0('Based on Data from: ',month.abb[input$start_month],'-',input$start_day,' to ',month.abb[input$end_month],'-',input$end_day)
+           Annual = 'Based on data from: entire year',
+           Monthly = paste0('Based on data from: ',month.name[as.numeric(input$time_selector)]),
+           Seasonal = paste0('Based on data from: ',str_to_title(input$season_selector)),
+           `Select Dates` = paste0('Based on data from: ',month.abb[input$start_month],'-',input$start_day,' to ',month.abb[input$end_month],'-',input$end_day)
     )
   })
 
@@ -126,6 +124,12 @@ server <- function(input, output) {
                       stations_shapefile = stations_sf,
                       slopes = senslope_dat(),
                       caption_label = date_choice_label())
+  })
+
+  output$my_hydrograph = renderPlot({
+    hydrograph_plot(dat = flow_dat_daily,
+                    clicked_station = click_station(),
+                    stations_shapefile = stations_sf)
   })
 
   output$test = DT::renderDT(dat_with_metric())
@@ -155,6 +159,8 @@ server <- function(input, output) {
 
   output$leafmap <- renderLeaflet({
 
+    easyButton(icon = 'circle',
+               onClick = )
     leaflet() %>%
       addProviderTiles(providers$CartoDB,group = "CartoDB") %>%
       addTiles(group = 'Streets') %>%
@@ -177,6 +183,12 @@ server <- function(input, output) {
                        fillOpacity = 0.75,
                        label = ~paste0(STATION_NAME, " (",STATION_NUMBER,") - ",HYD_STATUS),
                        data = stations_sf_with_trend()) %>%
+      addCircleMarkers(layerId = 'selected_station',
+                       color = 'orange',
+                       weight = 7.5,
+                       fillColor = 'transparent',
+                       data = stations_sf_with_trend() %>%
+                         filter(STATION_NUMBER == click_station())) %>%
       removeControl("legend") %>%
       addLegend(pal = mypal(),
                 values = ~trend_sig,
