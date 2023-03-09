@@ -49,6 +49,15 @@ server <- function(input, output) {
 
   })
 
+  # Has the tidyhydat database been downloaded?
+  output$db_version = renderText({
+    if(hydat_downloaded_state() == T){
+      paste0("Tidyhydat Version ",
+             hy_version()$Version,
+             " (",as.Date(hy_version()$Date),")")
+    }
+  })
+
   mk_results = reactive({
     calculate_MK_results(data = dat_with_metric(),
                          chosen_variable = input$user_var_choice)

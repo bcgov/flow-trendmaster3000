@@ -47,7 +47,11 @@ trend_select_options_tab = wellPanel(
                            'Three decades (1990 - present)' = '1990+',
                            'All available data' = 'all'),
                selected = 'all',
-               inline = F)
+               inline = F),
+  div(
+    textOutput('db_version'),
+    style = 'font-style:italic;font-size:small'
+  )
 )
 
 station_plot_tab = wellPanel(
