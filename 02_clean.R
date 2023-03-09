@@ -10,11 +10,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and limitations under the License.
 
-### Load in data that was accessed in the '01_load.R' script.
 
-if(!exists("number_daily_records_per_station")){load('./tmp/station_data.Rdata')}
-
-#Pulling in list of filtered stations from Jon Goetz work (see 'trending_station_selection.R' script)
+#Pulling in list of filtered stations from script 01_load.R (Jon Goetz's work)
 station_list_filtered = read.csv('data/finalstns.csv') %>% as_tibble()
 
 stations_to_keep = station_list_filtered$STATION_NUMBER
