@@ -9,31 +9,3 @@
 # Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and limitations under the License.
-
-library(EnvStats)
-library(tidyverse)
-library(data.table)
-library(tidyhydat)
-library(sf)
-
-if(!exists("number_daily_records_per_station")){load('./tmp/station_data_cleaned.Rdata')}
-
-# If no /www folder (used for the shiny app, and also for static results PDF)
-if(!dir.exists('app/www')) dir.create('app/www')
-
-# Daily Values ------------------------------------------------
-
-flow_dat = tidyhydat::hy_daily_flows(stations_to_keep) %>%
-  filter(Parameter == 'Flow') %>%
-  filter(!is.na(Value))
-
-feather::write_feather(flow_dat, 'app/www/all_flow_dat.feather')
-
-# Get station locations
-stations_sf = tidyhydat::hy_stations(station_number = stations_to_keep) %>%
-  mutate(STATION_NAME = stringr::str_to_title(STATION_NAME),
-         HYD_STATUS = stringr::str_to_title(HYD_STATUS)) %>%
-  st_as_sf(coords = c("LONGITUDE","LATITUDE"), crs = 4326) %>%
-  dplyr::select(STATION_NUMBER,STATION_NAME,HYD_STATUS)
-
-write_sf(stations_sf, 'app/www/stations.gpkg')

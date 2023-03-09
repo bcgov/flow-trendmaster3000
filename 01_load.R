@@ -28,6 +28,9 @@ library(tidyhydat)
 library(fasstr)
 library(stringr)
 
+# Download hydat database, if not already downloaded on your machine.
+tidyhydat::download_hydat()
+
 ##### First pass to filter for stations with complete data
 
 ## Filter stations for last n years of data, minimum number of years

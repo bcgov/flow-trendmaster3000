@@ -14,18 +14,22 @@
 #Pulling in list of filtered stations from script 01_load.R (Jon Goetz's work)
 station_list_filtered = read.csv('data/finalstns.csv') %>% as_tibble()
 
-stations_to_keep = station_list_filtered$STATION_NUMBER
+# If no /www folder (used for the shiny app, and also for static results PDF)
+if(!dir.exists('app/www')) dir.create('app/www')
 
-stations_to_exclude = number_daily_records_per_station %>%
-  filter(!STATION_NUMBER %in% stations_to_keep) %>%
-  dplyr::select(STATION_NUMBER) %>%
-  distinct() %>%
-  pull(STATION_NUMBER)
+# Daily Values ------------------------------------------------
 
-# Apply station filter to data.
-number_daily_records_per_station = number_daily_records_per_station %>%
-  filter(!STATION_NUMBER %in% stations_to_exclude) %>%
-  as_tibble()
+flow_dat = tidyhydat::hy_daily_flows(station_list_filtered$STATION_NUMBER) %>%
+  filter(Parameter == 'Flow') %>%
+  filter(!is.na(Value))
 
-# save(stations_to_keep, stations_to_exclude, number_daily_records_per_station, file = './tmp/station_data_cleaned.Rdata')
-save(stations_to_keep, stations_to_exclude, number_daily_records_per_station, file = './tmp/station_data_cleaned.Rdata')
+feather::write_feather(flow_dat, 'app/www/all_flow_dat.feather')
+
+# Get station locations
+stations_sf = tidyhydat::hy_stations(station_number = stations_to_keep) %>%
+  mutate(STATION_NAME = stringr::str_to_title(STATION_NAME),
+         HYD_STATUS = stringr::str_to_title(HYD_STATUS)) %>%
+  st_as_sf(coords = c("LONGITUDE","LATITUDE"), crs = 4326) %>%
+  dplyr::select(STATION_NUMBER,STATION_NAME,HYD_STATUS)
+
+write_sf(stations_sf, 'app/www/stations.gpkg')
