@@ -19,16 +19,19 @@ ui = shiny::fluidPage(
          #trend_selector:hover{opacity:0.9;}'))),
   shinyFeedback::useShinyFeedback(),
   titlePanel("Flow Indicator"),
+  uiOutput('ask_user_for_dir'),
   map_abs_panel,
-  card(trend_select_abs_panel)
+  trend_select_abs_panel
 )
 
 server <- function(input, output) {
 
+  source(file.path('User_Select_Folder.R'), local = T)$value
   source(file.path('Load_Filter_Data.R'), local = T)$value
   source(file.path('Render_UI_elements.R'), local = T)$value
 
   date_vars = c("Min_7_Day_DoY","DoY_50pct_TotalQ")
+
 
   # Update month selector to show months, if user picks month time-scale
   observeEvent(input$scale_selector_radio, {
@@ -51,11 +54,9 @@ server <- function(input, output) {
 
   # Has the tidyhydat database been downloaded?
   output$db_version = renderText({
-    if(hydat_downloaded_state() == T){
       paste0("Tidyhydat Version ",
-             hy_version()$Version,
-             " (",as.Date(hy_version()$Date),")")
-    }
+             hy_version(hydat_path = paste0(tempfiles_folder(),'Hydat.sqlite3'))$Version,
+             " (",as.Date(hy_version(hydat_path = paste0(tempfiles_folder(),'Hydat.sqlite3'))$Date),")")
   })
 
   mk_results = reactive({
@@ -71,7 +72,8 @@ server <- function(input, output) {
   output$testytest = DT::renderDT({dat_with_metric()})
 
   stations_sf_with_trend = reactive({
-    dat = stations_sf %>%
+    req(str_detect(dir_reactive_formatted(),'[A-Z]{1}/'))
+    dat = stations_sf() %>%
       left_join(mk_results())
 
     if(input$user_var_choice %in% date_vars){
@@ -130,7 +132,7 @@ server <- function(input, output) {
     station_flow_plot(data = dat_with_metric(),
                       variable_choice = input$user_var_choice,
                       clicked_station = click_station(),
-                      stations_shapefile = stations_sf,
+                      stations_shapefile = stations_sf(),
                       slopes = senslope_dat(),
                       caption_label = date_choice_label())
   })
@@ -138,7 +140,7 @@ server <- function(input, output) {
   output$my_hydrograph = renderPlot({
     hydrograph_plot(dat = flow_dat_daily,
                     clicked_station = click_station(),
-                    stations_shapefile = stations_sf)
+                    stations_shapefile = stations_sf())
   })
 
   output$test = DT::renderDT(dat_with_metric())
@@ -182,6 +184,7 @@ server <- function(input, output) {
   })
 
   observe({
+    browser()
     leafletProxy("leafmap") %>%
       clearMarkers() %>%
       addCircleMarkers(layerId = ~STATION_NUMBER,

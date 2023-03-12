@@ -12,6 +12,7 @@ library(lubridate)
 library(ggtext)
 library(feather)
 library(shinyFeedback)
+library(shinyFiles)
 
 # Trend selection options
 trend_select_options_tab = wellPanel(
