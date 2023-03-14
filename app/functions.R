@@ -1,25 +1,72 @@
 
+# First time running the app - generate feather data file + filtered station list.
+first_time_file_generator = function(temporary_folder){
+
+  # Download database, if it's not in the temporary folder.
+  if(!file.exists(paste0(temporary_folder,'Hydat.sqlite3'))){
+    withProgress(message = 'Performing one-time download of HYDAT database (takes 5-10 minutes)', {
+      incProgress(amount = 1/2)
+      tidyhydat::download_hydat(dl_hydat_here = temporary_folder,
+                                ask = F)
+      incProgress(amount = 1/2)
+    })
+  }
+
+  # Run Jon Goetz's station filtering script.
+  if(!file.exists(paste0(temporary_folder,'filtered_station_list.csv'))){
+
+    print("Need to run Jon G's filtering script")
+
+    source('Jon_G_station_filter_script.R')
+    # Jon's script start
+    final_stations_summary = jon_g_filtering_steps(my_path = paste0(temporary_folder,'Hydat.sqlite3'))
+
+    write.csv(final_stations_summary, paste0(temporary_folder,'filtered_station_list.csv'),
+              row.names = F)
+  }
+
+  if(!file.exists(paste0(tempfiles_folder(),'daily_flow_records.feather'))){
+
+    withProgress("One-time filtering of HYDAT database for daily records (10 mins max)", {
+      flow_dat_daily_to_write = tidyhydat::hy_daily_flows(station_number = station_list_filtered(),
+                                                          hydat_path = paste0(tempfiles_folder(),'Hydat.sqlite3')) %>%
+        filter(Parameter == 'Flow') %>%
+        filter(!is.na(Value)) %>%
+        mutate(Month = month(Date),
+               Year = year(Date))
+
+      incProgress(amount = 0.8, message = 'Pulled data from database')
+
+      feather::write_feather(flow_dat_daily_to_write,
+                             paste0(tempfiles_folder(),'daily_flow_records.feather'))
+
+      incProgress(amount = 0.2, message = 'Wrote file to your chosen folder')
+    })
+  }
+}
+
+
 # Calculate Mann-Kendall trend test for data.
 calculate_MK_results = function(data,chosen_variable){
-data %>%
-  group_by(STATION_NUMBER) %>%
-  reframe(MK_results = kendallTrendTest(values ~ Year)[c('statistic','p.value','estimate')]) %>%
-  unnest(MK_results) %>%
-  unnest_longer(col = MK_results) %>%
-  group_by(STATION_NUMBER) %>%
-  mutate(MK_results_id = c('Statistic','P_value','Tau','Slope','Intercept')) %>%
-  pivot_wider(names_from = MK_results_id, values_from = MK_results) %>%
-  mutate(trend_sig = fcase(
-    abs(Tau) <= 0.05 , "No Trend",
-    Tau < -0.05 & P_value < 0.05 & chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY'), "Significant Trend Earlier",
-    Tau < -0.05 & P_value >= 0.05 & chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY'), "Non-Significant Trend Earlier",
-    Tau > 0.05 & P_value >= 0.05 & chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY'), "Non-Significant Trend Later",
-    Tau > 0.05 & P_value < 0.05 & chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY'), "Significant Trend Later",
-    Tau < -0.05 & P_value < 0.05 & (!chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY')), "Significant Trend Down",
-    Tau < -0.05 & P_value >= 0.05 & (!chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY')), "Non-Significant Trend Down",
-    Tau > 0.05 & P_value >= 0.05 & (!chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY')), "Non-Significant Trend Up",
-    Tau > 0.05 & P_value < 0.05 & (!chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY')), "Significant Trend Up"
-  ))
+  data %>%
+    group_by(STATION_NUMBER) %>%
+    reframe(MK_results = kendallTrendTest(values ~ Year)[c('statistic','p.value','estimate')]) %>%
+    unnest(MK_results) %>%
+    unnest_longer(col = MK_results) %>%
+    group_by(STATION_NUMBER) %>%
+    mutate(MK_results_id = c('Statistic','P_value','Tau','Slope','Intercept')) %>%
+    pivot_wider(names_from = MK_results_id, values_from = MK_results) %>%
+    mutate(trend_sig = fcase(
+      abs(Tau) <= 0.05 , "No Trend",
+      Tau < -0.05 & P_value < 0.05 & chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY'), "Significant Trend Earlier",
+      Tau < -0.05 & P_value >= 0.05 & chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY'), "Non-Significant Trend Earlier",
+      Tau > 0.05 & P_value >= 0.05 & chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY'), "Non-Significant Trend Later",
+      Tau > 0.05 & P_value < 0.05 & chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY'), "Significant Trend Later",
+      Tau < -0.05 & P_value < 0.05 & (!chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY')), "Significant Trend Down",
+      Tau < -0.05 & P_value >= 0.05 & (!chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY')), "Non-Significant Trend Down",
+      Tau > 0.05 & P_value >= 0.05 & (!chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY')), "Non-Significant Trend Up",
+      Tau > 0.05 & P_value < 0.05 & (!chosen_variable %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY')), "Significant Trend Up"
+    ))
 }
 
 

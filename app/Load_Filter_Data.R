@@ -6,84 +6,14 @@
 # 3. Filter: variable of choice => 'dat_with_metric'
 
 
-# Load in data ----------------------------------------------------
-
-# Create a folder at the path the user has selected. We'll place
-# some files here to speed up app use in the future.
-
-tempfiles_folder = reactive({
-  req(!is.null(dir_reactive_formatted()))
-  if(str_extract(dir_reactive_formatted(),'.{1}$') != '/'){
-    this_folder = paste0(dir_reactive_formatted(),'/')
-  } else { this_folder = dir_reactive_formatted() }
-  paste0(this_folder,'Trendmaster3000_tmpfiles/')
-})
-
-observe({
-  if(!file.exists(paste0(tempfiles_folder(),'Hydat.sqlite3'))){
-    withProgress(message = 'Performing one-time download of HYDAT database (takes 5-10 minutes)', {
-      incProgress(amount = 1/2)
-      tidyhydat::download_hydat(dl_hydat_here = tempfiles_folder(),
-                                ask = F)
-      incProgress(amount = 1/2)
-    })
-  }
-})
-
-# Run Jon G's filtering script to get a list of stations to use.
-observe({
-
-  if(!file.exists(paste0(tempfiles_folder(),'filtered_station_list.csv'))){
-
-    source('Jon_G_station_filter_script.R')
-    # Jon's script start
-    final_stations_summary = jon_g_filtering_steps(my_path = paste0(tempfiles_folder(),'Hydat.sqlite3'))
-
-    write.csv(final_stations_summary, paste0(tempfiles_folder(),'filtered_station_list.csv'),
-              row.names = F)
-  }
-})
-
-stations_to_keep = reactive(read_csv(paste0(tempfiles_folder(),'filtered_station_list.csv')))
-
-station_list_filtered = reactive(stations_to_keep()$STATION_NUMBER)
-
-# If this is the first time the app is being run, download the daily flow values.
-flow_dat_daily = reactive({
-
-  if(!file.exists(paste0(tempfiles_folder(),'daily_flow_records.feather'))){
-    flow_dat_daily = tidyhydat::hy_daily_flows(station_number = station_list_filtered(),
-                                               hydat_path = paste0(tempfiles_folder(),'Hydat.sqlite3')) %>%
-      filter(Parameter == 'Flow') %>%
-      filter(!is.na(Value)) %>%
-      mutate(Month = month(Date),
-             Year = year(Date))
-    feather::write_feather(flow_dat_daily,
-                           paste0(tempfiles_folder(),'daily_flow_records.feather'))
-    return(flow_dat_daily)
-  } else {
-    flow_dat_daily = feather::read_feather(paste0(tempfiles_folder(),'daily_flow_records.feather'))
-    return(flow_dat_daily)
-  }
-})
-
-# Get the stations
-stations_sf = reactive({
-  tidyhydat::hy_stations(station_number = station_list_filtered(),
-                         hydat_path = paste0(tempfiles_folder(),'Hydat.sqlite3')) %>%
-    mutate(STATION_NAME = stringr::str_to_title(STATION_NAME),
-           HYD_STATUS = stringr::str_to_title(HYD_STATUS)) %>%
-    st_as_sf(coords = c("LONGITUDE","LATITUDE"), crs = 4326) %>%
-    dplyr::select(STATION_NUMBER,STATION_NAME,HYD_STATUS)
-})
-
-
 # First filtering cut: time periods -------------------------------
 dat_filtered = reactive({
+  browser()
+  req(exists('flow_dat_daily'))
   switch(input$user_period_choice,
-         `2010+` = flow_dat_daily() %>% filter(Year >= 2010),
-         `1990+` = flow_dat_daily() %>% filter(Year >= 1990),
-         `all` = flow_dat_daily()
+         `2010+` = flow_dat_daily %>% filter(Year >= 2010),
+         `1990+` = flow_dat_daily %>% filter(Year >= 1990),
+         `all` = flow_dat_daily
   )
 })
 

@@ -52,7 +52,8 @@ trend_select_options_tab = wellPanel(
   div(
     textOutput('db_version'),
     style = 'font-style:italic;font-size:small'
-  )
+  ),
+  verbatimTextOutput('test_text')
 )
 
 station_plot_tab = wellPanel(
