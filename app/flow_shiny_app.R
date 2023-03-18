@@ -11,73 +11,85 @@
 # See the License for the specific language governing permissions and limitations under the License.
 
 source('UI.R')
-source('functions.R')
+source('utils/first_run_funcs.R')
+source('utils/stats_funcs.R')
+source('utils/plot_funcs.R')
+source('utils/leafmap_funcs.R')
+source('modules/ask_user_for_dir.R')
 
 ui = shiny::fluidPage(
   tags$head(tags$style(
     HTML('#trend_selector {opacity:0.5;}
          #trend_selector:hover{opacity:0.9;}'))),
+
   shinyFeedback::useShinyFeedback(),
+
   titlePanel("Flow Indicator"),
+
+  # ask_user_for_server_ui('dir'),
   uiOutput('ask_user_for_dir'),
+
   map_abs_panel,
+
   trend_select_abs_panel
 )
 
 server <- function(input, output) {
 
-  # Get file folder selection from user.
-  shinyDirChoose(
-    input,
-    'dir',
-    roots = c("home" = 'C:/'),
-    filetypes = c('', 'txt', 'bigWig', "tsv", "csv", "bw")
-  )
+  tempfiles_folder = ask_user_for_dir_server('dir')
 
   output$ask_user_for_dir = renderUI({
     showModal(
       modalDialog(
-        h5("Please locate HYDAT database on your machine. If not yet downloaded, this will perform a one-time download (~200MB)."),
-        shinyDirButton("dir", "Select Folder","Select Folder"),
-        h5("If this is the first time you've run this script, \nit will also be necessary to run a station-filtering script. This takes 2-5 minutes."),
-        footer = actionButton("dismiss_modal",label = "Dismiss"))
+        h3("Folder Selection"),
+        h5("Please locate the HYDAT database on your machine.
+           If not yet downloaded, this will perform a one-time download (1.1GB)."),
+        h5("Please write (or copy + paste) the directory path in the following format:"),
+        h6("e.g. C:/Users/EPRESLEY/Downloads"),
+        # shinyDirButton("dir", "Select Folder","Select Folder"),
+        textInput(inputId = 'text_filepath',
+                  label = 'Path to your chosen folder (I recommend C:/tmp or C:/Users/YOURNAME/Downloads)',
+                  value = 'C:/tmp',
+                  width = '500px'),
+        h5(HTML("<b>Please note</b>: If this is the first time you've run this script, <br>it will also be necessary to run a station-filtering script. This takes 5-10 minutes.")),
+        actionButton('submit_filepath', label = 'Submit Filepath')
+      )
     )
   })
 
-  # Reactive of file folder chosen by user.
-  tempfiles_folder = eventReactive(input$dismiss_modal, {
-    paste0('C:',paste0(input$dir$path, collapse = '/'), '/Trendmaster3000_tmpfiles/')
+  tempfiles_folder = eventReactive(input$submit_filepath, {
+    path = input$text_filepath
+    # Make sure last character of path is a '/'
+    if(str_detect(path, '.{1}$') != '/') path = paste0(path,'/')
+
+    # Tack on name of folder for temporary files: "Trendmaster3000_tmpfiles"
+    paste0(path,"Trendmaster3000_tmpfiles/")
   })
 
-  observeEvent(input$dismiss_modal, {
+  observeEvent(input$submit_filepath, {
 
     # Drop the modal dialogue box.
     removeModal()
 
     #  Create the daily_flow_records.feather file, if not yet made.
-    if(!file.exists("C:/tmp/Trendmaster3000_tmpfiles/daily_flow_records.feather")){
+    if(!file.exists(paste0(tempfiles_folder(),"daily_flow_records.feather"))){
 
       print("need to make feather file!")
 
-      stations_to_keep = reactive({
-        read_csv(paste0(tempfiles_folder(),'filtered_station_list.csv'))
-        print("Stations to keep CSV read!")
-      })
-
-      station_list_filtered = reactive(stations_to_keep()$STATION_NUMBER)
-
       first_time_file_generator(temporary_folder = tempfiles_folder())
 
+      print("Finished making temporary files!")
     }
   })
 
   # Load in data ----------------------------------------------------
-  flow_dat_daily = eventReactive(input$dismiss_modal, {
+  flow_dat_daily = eventReactive(input$submit_filepath, {
+    req(file.exists(paste0(tempfiles_folder(),"daily_flow_records.feather")))
     feather::read_feather(paste0(tempfiles_folder(),"daily_flow_records.feather"))
   })
 
   # Get the stations
-  stations_sf = eventReactive(input$dismiss_modal, {
+  stations_sf = eventReactive(input$submit_filepath, {
     tidyhydat::hy_stations(station_number = read_csv(paste0(tempfiles_folder(),'filtered_station_list.csv')) %>% pull(STATION_NUMBER),
                            hydat_path = paste0(tempfiles_folder(),'Hydat.sqlite3')) %>%
       mutate(STATION_NAME = stringr::str_to_title(STATION_NAME),
@@ -86,20 +98,20 @@ server <- function(input, output) {
       dplyr::select(STATION_NUMBER,STATION_NAME,HYD_STATUS)
   })
 
-  stations_to_keep = eventReactive(input$dismiss_modal, {
+  stations_to_keep = eventReactive(input$submit_filepath, {
     read_csv(paste0(tempfiles_folder(),'filtered_station_list.csv'))
     print("Stations to keep CSV read!")
   })
 
-  station_list_filtered = eventReactive(input$dismiss_modal, {
+  station_list_filtered = eventReactive(input$submit_filepath, {
     req(exists('stations_to_keep'))
-        stations_to_keep()$STATION_NUMBER
+    stations_to_keep()$STATION_NUMBER
   })
   # source(file.path('Load_Filter_Data.R'), local = T)$value
 
   # First filtering cut: time periods -------------------------------
   dat_filtered = reactive({
-    req(exists('flow_dat_daily'))
+    # req(nrow(flow_dat_daily())>1)
     switch(input$user_period_choice,
            `2010+` = flow_dat_daily() %>% filter(Year >= 2010),
            `1990+` = flow_dat_daily() %>% filter(Year >= 1990),
@@ -181,6 +193,7 @@ server <- function(input, output) {
 
   # Now that data has been filtered, calculate metric.
   dat_with_metric = reactive({
+    req(exists('flow_dat_daily'))
 
     withProgress(message = 'calculating metric', {
 
@@ -303,9 +316,9 @@ server <- function(input, output) {
 
   # Has the tidyhydat database been downloaded?
   output$db_version = renderText({
-      paste0("Tidyhydat Version ",
-             hy_version(hydat_path = paste0(tempfiles_folder(),'Hydat.sqlite3'))$Version,
-             " (",as.Date(hy_version(hydat_path = paste0(tempfiles_folder(),'Hydat.sqlite3'))$Date),")")
+    paste0("Tidyhydat Version ",
+           hy_version(hydat_path = paste0(tempfiles_folder(),'Hydat.sqlite3'))$Version,
+           " (",as.Date(hy_version(hydat_path = paste0(tempfiles_folder(),'Hydat.sqlite3'))$Date),")")
   })
 
   mk_results = reactive({
@@ -365,9 +378,9 @@ server <- function(input, output) {
     # Capture the info of the clicked polygon. We use this for filtering.
     click_station(input$leafmap_marker_click$id)
     if(!input$tabset == 'Station Hydrograph'){
-    shiny::updateTabsetPanel(
-      inputId = 'tabset',
-      selected = 'Station Trend Plot')
+      shiny::updateTabsetPanel(
+        inputId = 'tabset',
+        selected = 'Station Trend Plot')
     }
   })
 
@@ -423,43 +436,14 @@ server <- function(input, output) {
   })
 
   output$leafmap <- renderLeaflet({
-
-    easyButton(icon = 'circle',
-               onClick = )
-    leaflet() %>%
-      addProviderTiles(providers$CartoDB,group = "CartoDB") %>%
-      addTiles(group = 'Streets') %>%
-      addProviderTiles(providers$Stamen.Terrain, group = "Terrain") %>%
-      add_bc_home_button() %>%
-      set_bc_view() %>%
-      addLayersControl(baseGroups = c("CartoDB","Streets","Terrain"),
-                       options = layersControlOptions(collapsed = F),
-                       position = 'bottomright')
+    make_base_bc_leafmap()
   })
 
   observe({
-    leafletProxy("leafmap") %>%
-      clearMarkers() %>%
-      addCircleMarkers(layerId = ~STATION_NUMBER,
-                       color = 'black',
-                       fillColor = ~mypal()(trend_sig),
-                       radius = 8,
-                       weight = 1,
-                       fillOpacity = 0.75,
-                       label = ~paste0(STATION_NAME, " (",STATION_NUMBER,") - ",HYD_STATUS),
-                       data = stations_sf_with_trend()) %>%
-      addCircleMarkers(layerId = 'selected_station',
-                       color = 'orange',
-                       weight = 7.5,
-                       fillColor = 'transparent',
-                       data = stations_sf_with_trend() %>%
-                         filter(STATION_NUMBER == click_station())) %>%
-      removeControl("legend") %>%
-      addLegend(pal = mypal(),
-                values = ~trend_sig,
-                title = 'Mann-Kendall Trend Result',
-                data = stations_sf_with_trend(),
-                layerId = 'legend')
+    update_leaflet(map = 'leafmap',
+                   stations = stations_sf_with_trend(),
+                   clicked_station = click_station(),
+                   pal = mypal())
   })
 }
 

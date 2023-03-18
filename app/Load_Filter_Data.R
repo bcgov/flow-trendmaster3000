@@ -8,7 +8,6 @@
 
 # First filtering cut: time periods -------------------------------
 dat_filtered = reactive({
-  browser()
   req(exists('flow_dat_daily'))
   switch(input$user_period_choice,
          `2010+` = flow_dat_daily %>% filter(Year >= 2010),
