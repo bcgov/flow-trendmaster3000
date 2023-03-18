@@ -1,33 +1,28 @@
 [![img](https://img.shields.io/badge/Lifecycle-Experimental-339999)](https://github.com/bcgov/repomountie/blob/master/doc/lifecycle-badges.md)
 
-# flow_indicator
+# Stream/River Flow (Trendmaster3000)
 
-### Usage
+This repository contains a Shiny app written in R by Chris Madsen. This
+app is intended to be used by anyone interested in examining the trends
+in stream / river flow metrics in British Columbia over time.
 
-Describe data being used (links), and how to run. Eg:
+To run this app, please ensure you have R and RStudio installed on your
+machine. Next, navigate to the `app/` folder and open the
+`flow_shiny_app.R` script. If you are using RStudio (recommended!), you
+should see a small green arrow with the text `Run App` near the top of
+the script window. Alternatively, you can press Control + Shift + Enter
+to run the app from inside RStudio.
 
-There are four core scripts that are required for the analysis, they
-need to be run in order:
+Once the app is running, you will be prompted to select a folder on your
+computer in which to download the HYDAT database. The database will be
+downloaded and some filtering files will be generated - this will only
+happen the first time you run the app. Once these files have been
+downloaded or generated, you are ready to explore flow trends!
 
--   01_clean.R
--   02_analysis.R
--   03_visualize.R
--   04_output.R
+#### Help and Feedback
 
-#### Example
-
-This is a basic example which shows you how to solve a common problem:
-
-``` r
-## basic example code
-```
-
-### Project Status
-
-### Getting Help or Reporting an Issue
-
-To report bugs/issues/feature requests, please file an
-[issue](https://github.com/bcgov/flow_indicator/issues/).
+Please contact me with any questions, issues or feedback at
+Chris.Madsen@gov.bc.ca
 
 ### How to Contribute
 

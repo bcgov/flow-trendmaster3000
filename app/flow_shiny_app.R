@@ -15,6 +15,7 @@ source('utils/first_run_funcs.R')
 source('utils/stats_funcs.R')
 source('utils/plot_funcs.R')
 source('utils/leafmap_funcs.R')
+source('utils/load_stations.R')
 source('modules/ask_user_for_dir.R')
 
 ui = shiny::fluidPage(
@@ -26,8 +27,8 @@ ui = shiny::fluidPage(
 
   titlePanel("Flow Indicator"),
 
-  # ask_user_for_server_ui('dir'),
-  uiOutput('ask_user_for_dir'),
+  ask_user_for_server_ui('dir'),
+  # uiOutput('ask_user_for_dir'),
 
   map_abs_panel,
 
@@ -36,27 +37,10 @@ ui = shiny::fluidPage(
 
 server <- function(input, output) {
 
-  tempfiles_folder = ask_user_for_dir_server('dir')
+  # Module that asks the user for their choice of directory.
+  ask_user_for_dir_server('dir')
 
-  output$ask_user_for_dir = renderUI({
-    showModal(
-      modalDialog(
-        h3("Folder Selection"),
-        h5("Please locate the HYDAT database on your machine.
-           If not yet downloaded, this will perform a one-time download (1.1GB)."),
-        h5("Please write (or copy + paste) the directory path in the following format:"),
-        h6("e.g. C:/Users/EPRESLEY/Downloads"),
-        # shinyDirButton("dir", "Select Folder","Select Folder"),
-        textInput(inputId = 'text_filepath',
-                  label = 'Path to your chosen folder (I recommend C:/tmp or C:/Users/YOURNAME/Downloads)',
-                  value = 'C:/tmp',
-                  width = '500px'),
-        h5(HTML("<b>Please note</b>: If this is the first time you've run this script, <br>it will also be necessary to run a station-filtering script. This takes 5-10 minutes.")),
-        actionButton('submit_filepath', label = 'Submit Filepath')
-      )
-    )
-  })
-
+  # Set path to data; create folder 'Trendmaster3000_tmpfiles' in user-selected folder.
   tempfiles_folder = eventReactive(input$submit_filepath, {
     path = input$text_filepath
     # Make sure last character of path is a '/'
@@ -64,49 +48,49 @@ server <- function(input, output) {
 
     # Tack on name of folder for temporary files: "Trendmaster3000_tmpfiles"
     paste0(path,"Trendmaster3000_tmpfiles/")
-  })
 
-  observeEvent(input$submit_filepath, {
-
-    # Drop the modal dialogue box.
+    # Close modal.
     removeModal()
-
-    #  Create the daily_flow_records.feather file, if not yet made.
-    if(!file.exists(paste0(tempfiles_folder(),"daily_flow_records.feather"))){
-
-      print("need to make feather file!")
-
-      first_time_file_generator(temporary_folder = tempfiles_folder())
-
-      print("Finished making temporary files!")
-    }
   })
+
+  # Create reactive for path to Hydat database.
+  hydat_path = reactive(paste0(tempfiles_folder(),'Hydat.sqlite3'))
+
+  # observeEvent(input$submit_filepath, {
+  #
+  #   # Drop the modal dialogue box.
+  #   removeModal()
+  #
+  #   #  Create the daily_flow_records.feather file, if not yet made.
+  #   if(!file.exists(paste0(tempfiles_folder(),"daily_flow_records.feather"))){
+  #
+  #     print("need to make feather file!")
+  #
+  #     first_time_file_generator(temporary_folder = tempfiles_folder())
+  #
+  #     print("Finished making temporary files!")
+  #   }
+  # })
 
   # Load in data ----------------------------------------------------
+  ## flow data.
   flow_dat_daily = eventReactive(input$submit_filepath, {
     req(file.exists(paste0(tempfiles_folder(),"daily_flow_records.feather")))
     feather::read_feather(paste0(tempfiles_folder(),"daily_flow_records.feather"))
   })
 
+  ## List of stations to include.
+  stations_list = reactive({
+    read.csv(paste0(tempfiles_folder(),'filtered_station_list.csv')) |>
+    pull(STATION_NUMBER)
+  })
+
   # Get the stations
   stations_sf = eventReactive(input$submit_filepath, {
-    tidyhydat::hy_stations(station_number = read_csv(paste0(tempfiles_folder(),'filtered_station_list.csv')) %>% pull(STATION_NUMBER),
-                           hydat_path = paste0(tempfiles_folder(),'Hydat.sqlite3')) %>%
-      mutate(STATION_NAME = stringr::str_to_title(STATION_NAME),
-             HYD_STATUS = stringr::str_to_title(HYD_STATUS)) %>%
-      st_as_sf(coords = c("LONGITUDE","LATITUDE"), crs = 4326) %>%
-      dplyr::select(STATION_NUMBER,STATION_NAME,HYD_STATUS)
+    #Utils function to read in stations from HYDAT, convert to sf.
+    get_station_sf(stations_list(), hydat_path = hydat_path())
   })
 
-  stations_to_keep = eventReactive(input$submit_filepath, {
-    read_csv(paste0(tempfiles_folder(),'filtered_station_list.csv'))
-    print("Stations to keep CSV read!")
-  })
-
-  station_list_filtered = eventReactive(input$submit_filepath, {
-    req(exists('stations_to_keep'))
-    stations_to_keep()$STATION_NUMBER
-  })
   # source(file.path('Load_Filter_Data.R'), local = T)$value
 
   # First filtering cut: time periods -------------------------------
