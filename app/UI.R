@@ -12,6 +12,7 @@ library(lubridate)
 library(ggtext)
 library(feather)
 library(shinyFeedback)
+library(shinyFiles)
 
 # Trend selection options
 trend_select_options_tab = wellPanel(
@@ -47,7 +48,12 @@ trend_select_options_tab = wellPanel(
                            'Three decades (1990 - present)' = '1990+',
                            'All available data' = 'all'),
                selected = 'all',
-               inline = F)
+               inline = F),
+  div(
+    textOutput('db_version'),
+    style = 'font-style:italic;font-size:small'
+  ),
+  verbatimTextOutput('test_text')
 )
 
 station_plot_tab = wellPanel(
