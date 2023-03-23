@@ -1,5 +1,6 @@
 library(shiny)
 library(bslib)
+library(plotly)
 library(leaflet)
 library(leaflet.providers)
 library(envreportutils)
@@ -12,80 +13,78 @@ library(lubridate)
 library(ggtext)
 library(feather)
 library(shinyFeedback)
-library(shinyFiles)
 
-# Trend selection options
-trend_select_options_tab = wellPanel(
-  fluidRow(
-    column(width = 6,
-           radioButtons(inputId = 'scale_selector_radio',
-                              label = 'Time Scale',
-                              choices = c('Annual',
-                                          'Monthly',
-                                          'Seasonal',
-                                          'Select Dates'),
-                              selected = 'Annual')
-    ),
-    column(width = 6,
-           uiOutput('month_selector_ui'),
-           uiOutput('season_selector_ui'),
-           uiOutput('custom_range_selector_ui')
-    )
+source('modules/filter_data.R')
+
+number_stations_vb = value_box(
+  "Number of Stations",
+  span(
+    textOutput('num_stations_on_plot')
   ),
-  selectizeInput(inputId = 'user_var_choice',
-                 label = 'Trend to Display',
-                 choices = c('Average Flow' = 'Median',
-                             'Date of 50% Flow' = 'DoY_50pct_TotalQ',
-                             'Minimum Flow (7day)' = 'Min_7_Day',
-                             'Date of Minimum Flow (7day)' = 'Min_7_Day_DoY',
-                             'Minimum Flow (30day)' = 'Min_30_Day',
-                             'Date of Minimum Flow (30day)' = 'Min_30_Day_DoY'),
-                 selected = 'Median',
-                 width = '100%'),
-  radioButtons(inputId = 'user_period_choice',
-               label = 'Date Cutoff',
-               choices = c('One decade (2010 - present)' = '2010+',
-                           'Three decades (1990 - present)' = '1990+',
-                           'All available data' = 'all'),
-               selected = 'all',
-               inline = F),
-  div(
-    textOutput('db_version'),
-    style = 'font-style:italic;font-size:small'
+  showcase = bsicons::bs_icon("moisture", size = "300%"),
+  class = "bg-secondary"
+)
+
+number_stations_declining = value_box(
+  "Stations Trend Down/Earlier",
+  span(
+    textOutput('num_stations_dec')
   ),
-  verbatimTextOutput('test_text')
+  showcase = bsicons::bs_icon("droplet-half", size = "300%"),
+  fill = F,
+  class = 'bg-danger'
 )
 
-station_plot_tab = wellPanel(
-  plotOutput('myplot',height=225)
+number_stations_increasing = value_box(
+  "Stations Trend Up/Later",
+  span(
+    textOutput('num_stations_inc')
+  ),
+  showcase = bsicons::bs_icon("droplet-fill", size = "300%"),
+  class = "bg-primary"
 )
 
-station_hydrograph_tab = wellPanel(
-  plotOutput('my_hydrograph',height=225)
+var_choice_bit = selectizeInput(
+  inputId = 'user_var_choice',
+  label = 'Trend to Display',
+  choices = c('Average Flow' = 'Median',
+              'Date of 50% Flow' = 'DoY_50pct_TotalQ',
+              'Minimum Flow (7day)' = 'Min_7_Day',
+              'Date of Minimum Flow (7day)' = 'Min_7_Day_DoY',
+              'Minimum Flow (30day)' = 'Min_30_Day',
+              'Date of Minimum Flow (30day)' = 'Min_30_Day_DoY'),
+  selected = 'Median',
+  width = '100%')
+
+sidebar_content = tagList(
+  var_choice_bit,
+  filter_data_Mod_UI('data'),
+  number_stations_vb,
+  number_stations_declining,
+  number_stations_increasing
 )
 
-# Absolute Panel with trend selection.
-trend_select_abs_panel = absolutePanel(
-  id = 'trend_selector',
-  top = 240, left = 10, width = 450, height = 550,
-  draggable = T,
+the_sidebar = sidebar(
+  width = '20%',
+  sidebar_content
+)
+
+station_plot = tagList(
+  plotlyOutput('myplot', height = 275)
+)
+
+hydrograph = tagList(
+  plotOutput('my_hydrograph', height = 275)
+)
+
+map = leafletOutput('leafmap',height = '400px')
+
+main_bit = tagList(
+  map,
   tabsetPanel(
     id = 'tabset',
-    tabPanel('Trend Options',trend_select_options_tab),
-    tabPanel('Station Trend Plot',station_plot_tab),
-    tabPanel('Station Hydrograph',station_hydrograph_tab)
+    tabPanel(title = 'Flow Metric Plot', station_plot),
+    tabPanel(title = 'Hydrograph', hydrograph)
   )
 )
 
-# Absolute panel with map as background.
-map_abs_panel = absolutePanel(
-  top = 0, left = 0, right = 0,
-  fixed = TRUE,
-  div(
-    style="padding: 8px; border-bottom: 1px solid #CCC; background: #FFFFEE;",
-    fluidRow(
-      leafletOutput('leafmap',
-                    height = '650px')
-    )
-  )
-)
