@@ -4,28 +4,23 @@ add_metric_to_dat_mod <- function(id, flow_dat_daily = flow_dat_daily,
   moduleServer(
     id,
     function(input, output, session) {
-      # browser()
+
       dat_with_metric = reactive({
 
-        req(exists('flow_dat_daily'))
-        # browser()
         withProgress(message = 'calculating metric', {
 
-          dat = data
+          req(!is.null(data()))
+
+          dat = data()
+          user_var_choice = user_var_choice()
+
           #Update progress bar...
           incProgress(1 / 2)
 
-          if(user_var_choice == 'Mean'){
+          if(user_var_choice == 'Average'){
             dat = dat %>%
               group_by(STATION_NUMBER,Year) %>%
-              summarise(Mean = mean(Value,na.rm=T))
-            #Update progress bar...
-            incProgress(1 / 2)
-          }
-          if(user_var_choice == 'Median'){
-            dat = dat %>%
-              group_by(STATION_NUMBER,Year) %>%
-              summarise(Median = median(Value,na.rm=T))
+              summarise(Average = median(Value,na.rm=T))
             #Update progress bar...
             incProgress(1 / 2)
           }
@@ -89,6 +84,30 @@ add_metric_to_dat_mod <- function(id, flow_dat_daily = flow_dat_daily,
             #Update progress bar...
             incProgress(1 / 4)
           }
+          if(user_var_choice %in% c('Max_7_Day','Max_7_Day_DoY')){
+            dat = dat %>%
+              group_by(STATION_NUMBER,Year) %>%
+              mutate(my_row = row_number()) %>%
+              ungroup()
+
+            daily_flows_dt = data.table::data.table(dat, key = c('STATION_NUMBER','Year'))
+
+            daily_flows_dt$Max_7_Day = frollmean(daily_flows_dt[, Value], 7, align = 'right')
+
+            #Update progress bar...
+            incProgress(1 / 4)
+
+            dat = as_tibble(daily_flows_dt) %>%
+              group_by(STATION_NUMBER,Year) %>%
+              slice_min(Max_7_Day) %>%
+              group_by(STATION_NUMBER,Year,Max_7_Day) %>%
+              slice(1) %>%
+              ungroup() %>%
+              dplyr::select(STATION_NUMBER,Year,Max_7_Day,Max_7_Day_DoY = my_row, Max_7_Day_Date = Date)
+
+            #Update progress bar...
+            incProgress(1 / 4)
+          }
           if(user_var_choice == 'Total_Volume_m3'){
             dat = dat %>%
               # The flow parameter here is a flow rate, i.e. m^3/second.
@@ -105,7 +124,7 @@ add_metric_to_dat_mod <- function(id, flow_dat_daily = flow_dat_daily,
           return(dat)
         })
       })
-      return(reactive(dat_with_metric()))
+      return(dat_with_metric)
     }
   )
 }

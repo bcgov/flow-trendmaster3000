@@ -29,6 +29,11 @@ ask_user_for_dir_server = function(id){
 
       ns = NS(id)
 
+      # If the user has downloaded the tidyhydat in 'C:/tmp',
+      # find that automatically and skip the rest.
+      if(file.exists("C:/tmp/Trendmaster3000_tmpfiles/Hydat.sqlite3")){
+        tempfiles_folder = reactiveVal('C:/tmp/Trendmaster3000_tmpfiles/')
+      } else {
       output$ask_user_for_dir = renderUI({
 
         showModal(
@@ -61,10 +66,11 @@ ask_user_for_dir_server = function(id){
       })
 
       observeEvent(input$submit_filepath, {
+        # browser()
 
         # Drop the modal dialogue box.
-        return(removeModal())
-
+        # return(removeModal())
+          removeModal()
         #  Create the daily_flow_records.feather file, if not yet made.
         if(!file.exists(paste0(tempfiles_folder(),"daily_flow_records.feather"))){
 
@@ -75,9 +81,8 @@ ask_user_for_dir_server = function(id){
           print("Finished making temporary files!")
         }
       })
+      }
 
-      # tempfile_dir_checked = reactiveVal(T)
-      # return(reactive(tempfile_dir_checked()))
       return(reactive(tempfiles_folder()))
     }
   )

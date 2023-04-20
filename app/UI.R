@@ -47,27 +47,16 @@ number_stations_increasing = value_box(
 var_choice_bit = selectizeInput(
   inputId = 'user_var_choice',
   label = 'Trend to Display',
-  choices = c('Average Flow' = 'Median',
+  choices = c('Average Flow' = 'Average',
               'Date of 50% Flow' = 'DoY_50pct_TotalQ',
-              'Minimum Flow (7day)' = 'Min_7_Day',
-              'Date of Minimum Flow (7day)' = 'Min_7_Day_DoY',
-              'Minimum Flow (30day)' = 'Min_30_Day',
-              'Date of Minimum Flow (30day)' = 'Min_30_Day_DoY'),
-  selected = 'Median',
+              'Minimum Flow (7-day)' = 'Min_7_Day',
+              'Date of Minimum Flow (7-day)' = 'Min_7_Day_DoY',
+              'Minimum Flow (30-day)' = 'Min_30_Day',
+              'Date of Minimum Flow (30-day)' = 'Min_30_Day_DoY',
+              'Maximum Flow (7-day)' = 'Max_7_Day',
+              'Date of Maximum Flow (7-day)' = 'Max_7_Day_DoY'),
+  selected = 'Average',
   width = '100%')
-
-sidebar_content = tagList(
-  var_choice_bit,
-  filter_data_Mod_UI('data'),
-  number_stations_vb,
-  number_stations_declining,
-  number_stations_increasing
-)
-
-the_sidebar = sidebar(
-  width = '20%',
-  sidebar_content
-)
 
 station_plot = tagList(
   plotlyOutput('myplot', height = 275)

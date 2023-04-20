@@ -26,6 +26,19 @@ my_theme = bs_theme(bootswatch = 'flatly',
                     primary = '#3399ff',
                     font_scale = 0.75)
 
+sidebar_content = tagList(
+  var_choice_bit,
+  filter_data_Mod_UI('data'),
+  number_stations_vb,
+  number_stations_declining,
+  number_stations_increasing
+)
+
+the_sidebar = sidebar(
+  width = '20%',
+  sidebar_content
+)
+
 ui = page_fluid(
   theme = my_theme,
 
@@ -74,7 +87,7 @@ server <- function(input, output) {
     feather::read_feather(paste0(tempfiles_folder(),"daily_flow_records.feather"))
   })
 
-  output$number_rows_raw_dat = renderText(nrow(flow_dat_daily()))
+  output$number_rows_raw_dat = renderText(nrow(filtering_mod_output$dat_filtered()))
 
   ## List of stations to include.
   stations_list = reactive({
@@ -94,19 +107,18 @@ server <- function(input, output) {
 
   # Use the metric-adding module on the filtered data.
   dat_with_metric <- add_metric_to_dat_mod("data2",
-                                           data = filtering_mod_output$dat_filtered(),
-                                           user_var_choice = input$user_var_choice)
+                                           data = filtering_mod_output$dat_filtered,
+                                           user_var_choice = user_var)
 
   date_vars = c("Min_7_Day_DoY","DoY_50pct_TotalQ")
 
   # Run the Mann-Kendall trend analysis on the data with metric.
   mk_results <- calculate_mk_mod('mk_res',
-                                data = dat_with_metric(),
-                                user_var_choice = user_var())
+                                data = dat_with_metric,
+                                user_var_choice = user_var)
 
   # Attach the MK results to the data with metric.
   flow_dat_with_mk = reactive({
-    browser()
     dat_with_metric() %>%
       left_join(mk_results())
   })

@@ -3,11 +3,15 @@
 first_time_file_generator = function(temporary_folder){
 
   # Download database, if it's not in the temporary folder.
-
+  browser()
   withProgress(message = 'Performing one-time download of HYDAT database (takes 5-10 minutes)', {
 
+    if(!file.exists(paste0(temporary_folder,"Hydat.sqlite3"))){
     tidyhydat::download_hydat(dl_hydat_here = temporary_folder,
                               ask = F)
+    }
+
+    tidyhydat::hy_set_default_db(hydat_path = temporary_folder)
 
     incProgress(amount = 1/5, message = 'database downloaded to folder...')
 

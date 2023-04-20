@@ -34,6 +34,8 @@ filter_data_Mod_Server = function(id, flow_dat_daily){
     id,
     function(input, output, session){
 
+      # Function to generate a user interface based on the
+      # 'Time Scale' the user has chosen.
       determine_finegrain_selector_ui = function(id, scale){
 
         ns <- NS(id)
@@ -101,22 +103,22 @@ filter_data_Mod_Server = function(id, flow_dat_daily){
         determine_finegrain_selector_ui(id, input$scale_selector_radio)
       })
 
-      finegrained_selector = reactive({
-        if(input$scale_selector_radio == 'Annual') 'Annual'
-        else input$finegrain_selector
+      # Reactive of user's Time Scale filter choice.
+      # 1. If Annual, no filtering performed.
+      # 2. If monthly, keeps data only for a given month.
+      # 3. If Seasonal, keep data only for a given season.
+      # 4. If 'Select Dates', keeps data between start month and day and end month and day.
+      finegrain_selector_reactive = reactive({
+        if(input$scale_selector_radio == 'Annual') return(NULL)
+        input$finegrain_selector
       })
 
       finegrained_date_filter = function(dat, scale_selector, finegrain_selector){
-        req(!is.null(finegrained_selector()))
-        # browser()
+
         withProgress(message = 'applying date filter', {
           # req() tells the app to not start solving this reactive expression until
           # we have a value for the scale selection radio buttons! This delay
           # avoids errors while these buttons are loading.
-          # if(scale_selector == 'Select Dates'){
-          #   req(input$start_month, input$start_day, input$end_month, input$end_day)
-          # }
-          #In the case of annual timescale, do no filtering here.
 
           #Update progress bar...
           incProgress(1 / 2)
@@ -178,19 +180,20 @@ filter_data_Mod_Server = function(id, flow_dat_daily){
         })
       }
 
-      # finegrain_selector_reactive = reactive({
-      #   if(is.null(input$finegrain_selector)) return(NULL)
-      #   input$finegrain_selector
-      # })
-
       # First filtering cut: time periods -------------------------------
-      dat_filtered = reactive({
-        # req(!is.null(finegrain_selector_reactive()))
-        dat = switch(input$user_period_choice,
-                     `2010+` = flow_dat_daily %>% filter(Year >= 2010),
-                     `1990+` = flow_dat_daily %>% filter(Year >= 1990),
-                     `all` = flow_dat_daily
+      dat_period_filtered = reactive({
+        switch(input$user_period_choice,
+               `2010+` = flow_dat_daily %>% filter(Year >= 2010),
+               `1990+` = flow_dat_daily %>% filter(Year >= 1990),
+               `all` = flow_dat_daily
         )
+      })
+
+      # Second filtering cut: Time scale ---------------------------------
+      dat_tscale_filtered = reactive({
+        req(!is.null(finegrain_selector_reactive()) | input$scale_selector_radio == 'Annual')
+
+        dat = dat_period_filtered()
 
         if(input$scale_selector_radio == 'Annual') {
           dat = finegrained_date_filter(dat, 'Annual', 'Annual')
@@ -237,7 +240,7 @@ filter_data_Mod_Server = function(id, flow_dat_daily){
       # Return a list of reactive outputs. If the scale selector is for
       # specific dates, return all of the start_month, start_day, end_month, and end_day
         list(
-          dat_filtered = reactive(dat_filtered()),
+          dat_filtered = reactive(dat_tscale_filtered()),
           scale_selector_radio = reactive(input$scale_selector_radio),
           finegrain_reactives_list = reactive(finegrain_reactive_list())
       )
