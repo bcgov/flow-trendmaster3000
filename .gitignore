@@ -7,5 +7,5 @@
 /out
 /tmp
 /data
-/app/www
+/app/www/**
 /app/rsconnect
