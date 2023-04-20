@@ -58,22 +58,67 @@ var_choice_bit = selectizeInput(
   selected = 'Average',
   width = '100%')
 
+multi_switch = shinyWidgets::switchInput(inputId = "multi_station",
+                          label = 'Station Selection Mode',
+                          value = FALSE,
+                          onLabel = 'Multi',
+                          offLabel = 'Single')
+
+map_shape_bit = selectizeInput(
+  inputId = 'user_shape_choice',
+  label = 'Region Type',
+  choices = c('None' = 'none',
+              'Ecoprovinces' = 'ecoprov',
+              'Ecoregions' = 'ecoreg',
+              'Ecosections' = 'ecosec',
+              'Natural Resource Districts' = 'nr_dist',
+              'Natural Resource Regions' = 'nr_reg'),
+  selected = 'None'
+)
+
+data_download_bit = card(
+  card_body(
+    p("Download data for selected stations, incorporating any filters that have been applied."),
+    uiOutput('download_flow_data_ui'),
+    uiOutput('download_data_with_results_ui')
+  )
+)
 station_plot = tagList(
-  plotlyOutput('myplot', height = 275)
+  plotlyOutput('myplot', height = 250)
 )
 
 hydrograph = tagList(
-  plotOutput('my_hydrograph', height = 275)
+  plotlyOutput('my_hydrograph', height = 250)
 )
 
-map = leafletOutput('leafmap',height = '400px')
+map = leafletOutput('leafmap', height = '100%')
+
+sidebar_content = tagList(
+  var_choice_bit,
+  filter_data_Mod_UI('data'),
+  map_shape_bit,
+  multi_switch,
+  number_stations_vb,
+  number_stations_declining,
+  number_stations_increasing
+)
+
+the_sidebar = sidebar(
+  width = '20%',
+  sidebar_content
+)
 
 main_bit = tagList(
   map,
-  tabsetPanel(
-    id = 'tabset',
-    tabPanel(title = 'Flow Metric Plot', station_plot),
-    tabPanel(title = 'Hydrograph', hydrograph)
+  absolutePanel(
+    id = 'trend_selector',
+    top = '60%', left = '22%', right = '2%', height = '25%',
+    bslib::navs_pill(
+      id = 'tabset',
+      nav(title = 'Flow Metric Plot', station_plot),
+      nav(title = 'Hydrograph', hydrograph),
+      nav(title = 'Data Download', data_download_bit)
+    )
   )
 )
 

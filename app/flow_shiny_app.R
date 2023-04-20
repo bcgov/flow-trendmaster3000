@@ -26,20 +26,13 @@ my_theme = bs_theme(bootswatch = 'flatly',
                     primary = '#3399ff',
                     font_scale = 0.75)
 
-sidebar_content = tagList(
-  var_choice_bit,
-  filter_data_Mod_UI('data'),
-  number_stations_vb,
-  number_stations_declining,
-  number_stations_increasing
-)
 
-the_sidebar = sidebar(
-  width = '20%',
-  sidebar_content
-)
 
-ui = page_fluid(
+ui = page_fillable(
+  tags$head(tags$style(
+    HTML('#trend_selector {opacity:0.5;}
+          #trend_selector:hover{opacity:0.9;}'))),
+
   theme = my_theme,
 
   shinyFeedback::useShinyFeedback(),
@@ -49,30 +42,19 @@ ui = page_fluid(
   layout_sidebar(
     sidebar = the_sidebar,
     main_bit,
-    textOutput('number_rows_raw_dat')
+    textOutput('stations_selected')
   )
 )
 
 
 
 server <- function(input, output) {
+
   # Module that asks the user for their choice of directory.
   tempfiles_folder = ask_user_for_dir_server('dir')
 
   # Once user has selected a filepath, remove modal.
   observeEvent(input$submit_filepath, removeModal())
-
-  # # Set path to data; create folder 'Trendmaster3000_tmpfiles' in user-selected folder.
-  # tempfiles_folder = reactive({
-  #   browser()
-  #   req(input$text_filepath)
-  #   path = input$text_filepath
-  #   # Make sure last character of path is a '/'
-  #   if(str_detect(path, '.{1}$') != '/') path = paste0(path,'/')
-  #
-  #   # Tack on name of folder for temporary files: "Trendmaster3000_tmpfiles"
-  #   paste0(path,"Trendmaster3000_tmpfiles/")
-  # })
 
   # Create reactive for path to Hydat database.
   hydat_path = reactive(paste0(tempfiles_folder(),'Hydat.sqlite3'))
@@ -98,19 +80,27 @@ server <- function(input, output) {
   # Get the stations
   stations_sf = reactive({
     #Utils function to read in stations from HYDAT, convert to sf.
-    get_station_sf(stations_list(), hydat_path = hydat_path())
+    stations = get_station_sf(stations_list(), hydat_path = hydat_path())
+
+    #If the user has selected a shape on the leaflet map, filter stations.
+    if(click_shape() != 'no_selection'){
+      stations = stations %>%
+        st_join(shape_for_map() %>% filter(shape_name == click_shape()), st_intersects) %>%
+        filter(!is.na(shape_name))
+    }
+
+    stations
   })
 
   # Use the data filtering module on the raw data.
   filtering_mod_output <- filter_data_Mod_Server("data",
-                                        flow_dat_daily())
+                                        flow_dat_daily(),
+                                        shape = click_shape)
 
   # Use the metric-adding module on the filtered data.
   dat_with_metric <- add_metric_to_dat_mod("data2",
                                            data = filtering_mod_output$dat_filtered,
                                            user_var_choice = user_var)
-
-  date_vars = c("Min_7_Day_DoY","DoY_50pct_TotalQ")
 
   # Run the Mann-Kendall trend analysis on the data with metric.
   mk_results <- calculate_mk_mod('mk_res',
@@ -122,6 +112,9 @@ server <- function(input, output) {
     dat_with_metric() %>%
       left_join(mk_results())
   })
+
+  # Specify which variables are 'Date' variables (for plot labelling)
+  date_vars = c("Min_7_Day_DoY","DoY_50pct_TotalQ")
 
   # Add the flow data with MK trend results to the
   # spatial object of the stations.
@@ -157,8 +150,25 @@ server <- function(input, output) {
     return(dat)
   })
 
+  ## Shapes for leaflet map station filtering.
+  shape_for_map = reactive({
+   switch(input$user_shape_choice,
+           none = st_set_geometry(
+             tibble(shape_name = 'Nothing'),
+             tibble(lon = c(1,0), lat = c(0, 1)) %>%
+            st_as_sf(coords = c('lon','lat'), crs = 4326) %>%
+            st_bbox() %>%
+            st_as_sfc()
+            ),
+           ecoprov = read_sf('www/ecoprovinces.gpkg') %>% st_transform(crs = 4326),
+           ecoreg = read_sf('www/ecoregions.gpkg') %>% st_transform(crs = 4326),
+           ecosec = read_sf('www/ecosections.gpkg') %>% st_transform(crs = 4326),
+           nr_dist = read_sf('www/nr_districts.gpkg') %>% st_transform(crs = 4326),
+           nr_reg = read_sf('www/nr_regions.gpkg') %>% st_transform(crs = 4326))
+  })
+
   # Render summary values for sidebar.
-  output$num_stations_on_plot = renderText({nrow(stations_sf_with_trend())})
+  output$num_stations_on_plot = renderText({nrow(stations_sf_with_trend() %>% filter(!is.na(trend_sig)))})
 
   output$num_stations_dec = renderText({nrow(stations_sf_with_trend() |>
                                                filter(trend_sig %in% c('Significant Trend Earlier',
@@ -167,30 +177,62 @@ server <- function(input, output) {
   output$num_stations_inc = renderText({nrow(stations_sf_with_trend() |>
                                                filter(trend_sig %in% c('Significant Trend Later',
                                                                        'Significant Trend Up')))})
-  # Set up a reactive value that stores a district's name upon user's click
+  # Set up reactive values that store the clicked station and map shape
   click_station <- reactiveVal('no_selection')
+  click_shape <- reactiveVal('no_selection')
+
 
   # Get Mann-Kendall trend slope and intercept for our station-specific plot.
   senslope_dat = reactive({
+    # browser()
     flow_dat_with_mk() %>%
-      filter(STATION_NUMBER == click_station()) %>%
+      filter(STATION_NUMBER %in% click_station()) %>%
+      left_join(stations_sf() %>%
+                  st_drop_geometry() %>%
+                  dplyr::select(STATION_NUMBER,STATION_NAME),
+                by = 'STATION_NUMBER') %>%
       left_join(mk_results()) %>%
       mutate(SlopePreds = Intercept+Slope*Year)
   })
 
   # Watch for a click on the leaflet map. Once clicked...
-  # 1. Update selection.
+  # 1. Update selection of marker.
   observeEvent(input$leafmap_marker_click, {
     # Capture the info of the clicked polygon. We use this for filtering.
-    click_station(input$leafmap_marker_click$id)
+
+    # Note - are we in 'multiple station select mode', or
+    # 'single station select mode'? If multiple,
+    # keep station IDs as we click them.
+    if(input$multi_station == T){
+      new_click_station_value = c(click_station(), input$leafmap_marker_click$id)
+      click_station(new_click_station_value[new_click_station_value != 'no_selection'])
+    } else {
+      click_station(input$leafmap_marker_click$id)
+    }
     shiny::updateTabsetPanel(
       inputId = 'tabset',
       selected = 'Station Plot')
   })
 
+  # 1. AND/OR Update selection of shape.
+  observeEvent(input$leafmap_shape_click, {
+    # Capture the info of the clicked polygon.
+    # If different from current selection, update selection.
+    if(click_shape() != input$leafmap_shape_click$id){
+      click_shape(input$leafmap_shape_click$id)
+    }
+    # Reset station selection (good idea?)
+    click_station('no_selection')
+  })
+
+  # Also, when the user changes the region shape, reset the clicked shape to 'no_selection'
+  observeEvent(input$user_shape_choice, {
+    click_shape('no_selection')
+  })
+
   output$selected_station = renderText({paste0("Station: ",click_station())})
 
-  # Generate label of which
+  # Generate label depending on which time frame the data is based.
   date_choice_label = reactive({
     switch(filtering_mod_output$scale_selector_radio(),
            Annual = 'Based on data from: entire year',
@@ -211,13 +253,44 @@ server <- function(input, output) {
     ggplotly(p)
   })
 
-  output$my_hydrograph = renderPlot({
-    h = hydrograph_plot(dat = flow_dat_daily(),
-                    clicked_station = click_station(),
-                    stations_shapefile = stations_sf())
-    # ggplotly(h)
-    h
+  output$my_hydrograph = renderPlotly({
+    h = hydrograph_plot(
+      #dat = flow_dat_daily(),
+      dat = filtering_mod_output$dat_filtered(),
+        clicked_station = click_station(),
+      stations_shapefile = stations_sf())
+
+    ggplotly(h)
   })
+
+  # DATA DOWNLOAD #
+  output$download_flow_data_ui = renderUI({
+    downloadButton("download_flow_data",paste0("Download Daily Flow Data (",length(click_station()[click_station() != 'no_selection'])," station(s) selected)"))
+  })
+
+  output$download_flow_data <- downloadHandler(
+    filename = function() {
+      paste0("HYDAT_flow_data_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      write.csv(filtering_mod_output$dat_filtered() %>%
+                  filter(STATION_NUMBER %in% click_station()), file, row.names = F)
+    }
+  )
+
+  # DATA DOWNLOAD #
+  output$download_data_with_results_ui = renderUI({
+    downloadButton("download_data_with_results", paste0("Download Trend Analysis Results (",length(click_station()[click_station() != 'no_selection'])," station(s) selected"))
+  })
+
+  output$download_data_with_results <- downloadHandler(
+    filename = function() {
+      paste0("HYDAT_data_with_MK_results_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      write.csv(senslope_dat(), file, row.names = F)
+    }
+  )
 
   mypal = reactive({
     # if(input$user_var_choice %in% date_vars){
@@ -250,6 +323,7 @@ server <- function(input, output) {
     update_leaflet(map = 'leafmap',
                    stations = stations_sf_with_trend(),
                    clicked_station = click_station(),
+                   shapes = shape_for_map(),
                    pal = mypal())
   })
 }

@@ -6,7 +6,7 @@ filter_data_Mod_UI = function(id){
     label = 'Time Scale',
     choices = c('Annual',
                 'Monthly',
-                'Seasonal',
+                #'Seasonal',
                 'Select Dates'),
     selected = 'Annual')
 
@@ -20,15 +20,17 @@ filter_data_Mod_UI = function(id){
     inline = F)
 
   tagList(
-    scale_selector_bit,
-    period_choice_bit,
+    layout_column_wrap(
+      width = 1/2,
+      scale_selector_bit,
+      period_choice_bit),
     uiOutput(ns('finegrained_data_filter_ui')
   )
   )
 }
 
 # Module server filters data based on inputs from user.
-filter_data_Mod_Server = function(id, flow_dat_daily){
+filter_data_Mod_Server = function(id, flow_dat_daily, shape){
 
   moduleServer(
     id,
@@ -53,15 +55,15 @@ filter_data_Mod_Server = function(id, flow_dat_daily){
                                            'Sep' = 9,'Oct' = 10,
                                            'Nov' = 11,'Dec' = 12))
         }
-        if(scale == 'Seasonal'){
-          out = selectizeInput(ns('finegrain_selector'),
-                               label = 'Season Selector',
-                               multiple = F,
-                               choices = c('Winter (Dec-Feb)' = 'winter',
-                                           'Spring (Mar-May)' = 'spring',
-                                           'Summer (Jun-Aug)' = 'summer',
-                                           'Autumn (Sep-Nov)' = 'autumn'))
-        }
+        # if(scale == 'Seasonal'){
+        #   out = selectizeInput(ns('finegrain_selector'),
+        #                        label = 'Season Selector',
+        #                        multiple = F,
+        #                        choices = c('Winter (Dec-Feb)' = 'winter',
+        #                                    'Spring (Mar-May)' = 'spring',
+        #                                    'Summer (Jun-Aug)' = 'summer',
+        #                                    'Autumn (Sep-Nov)' = 'autumn'))
+        # }
         if(scale == 'Select Dates'){
           out = tagList(
             fluidRow(
@@ -131,18 +133,18 @@ filter_data_Mod_Server = function(id, flow_dat_daily){
             incProgress(1 / 2)
           }
 
-          if(scale_selector == 'Seasonal'){
-            dat = dat %>%
-              mutate(season = case_when(
-                Month %in% c(12,1,2) ~ 'winter',
-                Month %in% c(3:5) ~ 'spring',
-                Month %in% c(6:8) ~ 'summer',
-                Month %in% c(9:11) ~ 'autumn'
-              )) %>%
-              filter(season == finegrain_selector[1])
-            #Update progress bar...
-            incProgress(1 / 2)
-          }
+          # if(scale_selector == 'Seasonal'){
+          #   dat = dat %>%
+          #     mutate(season = case_when(
+          #       Month %in% c(12,1,2) ~ 'winter',
+          #       Month %in% c(3:5) ~ 'spring',
+          #       Month %in% c(6:8) ~ 'summer',
+          #       Month %in% c(9:11) ~ 'autumn'
+          #     )) %>%
+          #     filter(season == finegrain_selector[1])
+          #   #Update progress bar...
+          #   incProgress(1 / 2)
+          # }
 
           #If custom time scale, use it here to filter data.
           if(scale_selector == 'Select Dates'){
@@ -205,10 +207,10 @@ filter_data_Mod_Server = function(id, flow_dat_daily){
           return(dat)
         }
 
-        if(input$scale_selector_radio == 'Seasonal') {
-          dat = finegrained_date_filter(dat, input$scale_selector_radio, input$finegrain_selector)
-          return(dat)
-        }
+        # if(input$scale_selector_radio == 'Seasonal') {
+        #   dat = finegrained_date_filter(dat, input$scale_selector_radio, input$finegrain_selector)
+        #   return(dat)
+        # }
 
         if(input$scale_selector_radio == 'Select Dates') {
           dat = finegrained_date_filter(dat,
