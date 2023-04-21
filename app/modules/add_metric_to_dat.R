@@ -42,14 +42,12 @@ add_metric_to_dat_mod <- function(id, flow_dat_daily = flow_dat_daily,
               mutate(my_row = row_number()) %>%
               ungroup()
 
-            daily_flows_dt = data.table::data.table(dat, key = c('STATION_NUMBER','Year'))
-
-            daily_flows_dt$Min_7_Day = frollmean(daily_flows_dt[, Value], 7, align = 'right')
+            dat$Min_7_Day = RcppRoll::roll_mean(dat$Value, n = 7, align = 'right', fill = NA)
 
             #Update progress bar...
             incProgress(1 / 4)
 
-            dat = as_tibble(daily_flows_dt) %>%
+            dat = dat %>%
               group_by(STATION_NUMBER,Year) %>%
               slice_min(Min_7_Day) %>%
               group_by(STATION_NUMBER,Year,Min_7_Day) %>%
@@ -66,14 +64,12 @@ add_metric_to_dat_mod <- function(id, flow_dat_daily = flow_dat_daily,
               mutate(my_row = row_number()) %>%
               ungroup()
 
-            daily_flows_dt = data.table::data.table(dat, key = c('STATION_NUMBER','Year'))
-
-            daily_flows_dt$Min_30_Day = frollmean(daily_flows_dt[, Value], 30, align = 'right')
+            dat$Min_30_Day = RcppRoll::roll_mean(dat$Value, n = 30, align = 'right', fill = NA)
 
             #Update progress bar...
             incProgress(1 / 4)
 
-            dat = as_tibble(daily_flows_dt) %>%
+            dat = as_tibble(dat) %>%
               group_by(STATION_NUMBER,Year) %>%
               slice_min(Min_30_Day) %>%
               group_by(STATION_NUMBER,Year,Min_30_Day) %>%
@@ -90,14 +86,12 @@ add_metric_to_dat_mod <- function(id, flow_dat_daily = flow_dat_daily,
               mutate(my_row = row_number()) %>%
               ungroup()
 
-            daily_flows_dt = data.table::data.table(dat, key = c('STATION_NUMBER','Year'))
-
-            daily_flows_dt$Max_7_Day = frollmean(daily_flows_dt[, Value], 7, align = 'right')
+            dat$Max_7_Day = RcppRoll::roll_mean(dat$Value, n = 7, align = 'right', fill = NA)
 
             #Update progress bar...
             incProgress(1 / 4)
 
-            dat = as_tibble(daily_flows_dt) %>%
+            dat = as_tibble(dat) %>%
               group_by(STATION_NUMBER,Year) %>%
               slice_min(Max_7_Day) %>%
               group_by(STATION_NUMBER,Year,Max_7_Day) %>%

@@ -55,15 +55,6 @@ filter_data_Mod_Server = function(id, flow_dat_daily, shape){
                                            'Sep' = 9,'Oct' = 10,
                                            'Nov' = 11,'Dec' = 12))
         }
-        # if(scale == 'Seasonal'){
-        #   out = selectizeInput(ns('finegrain_selector'),
-        #                        label = 'Season Selector',
-        #                        multiple = F,
-        #                        choices = c('Winter (Dec-Feb)' = 'winter',
-        #                                    'Spring (Mar-May)' = 'spring',
-        #                                    'Summer (Jun-Aug)' = 'summer',
-        #                                    'Autumn (Sep-Nov)' = 'autumn'))
-        # }
         if(scale == 'Select Dates'){
           out = tagList(
             fluidRow(
@@ -108,7 +99,6 @@ filter_data_Mod_Server = function(id, flow_dat_daily, shape){
       # Reactive of user's Time Scale filter choice.
       # 1. If Annual, no filtering performed.
       # 2. If monthly, keeps data only for a given month.
-      # 3. If Seasonal, keep data only for a given season.
       # 4. If 'Select Dates', keeps data between start month and day and end month and day.
       finegrain_selector_reactive = reactive({
         if(input$scale_selector_radio == 'Annual') return(NULL)
@@ -133,19 +123,6 @@ filter_data_Mod_Server = function(id, flow_dat_daily, shape){
             incProgress(1 / 2)
           }
 
-          # if(scale_selector == 'Seasonal'){
-          #   dat = dat %>%
-          #     mutate(season = case_when(
-          #       Month %in% c(12,1,2) ~ 'winter',
-          #       Month %in% c(3:5) ~ 'spring',
-          #       Month %in% c(6:8) ~ 'summer',
-          #       Month %in% c(9:11) ~ 'autumn'
-          #     )) %>%
-          #     filter(season == finegrain_selector[1])
-          #   #Update progress bar...
-          #   incProgress(1 / 2)
-          # }
-
           #If custom time scale, use it here to filter data.
           if(scale_selector == 'Select Dates'){
             start_month = finegrain_selector[1]
@@ -155,26 +132,37 @@ filter_data_Mod_Server = function(id, flow_dat_daily, shape){
 
             req(start_month, start_day, end_month, end_day)
 
-            # Use {lubridate} to calculate the start and end periods. We use these to filter the data.
-            start_period = (months(as.numeric(start_month)) + days(start_day))
-            end_period = (months(as.numeric(end_month)) + days(end_day))
+            # # Use {lubridate} to calculate the start and end periods. We use these to filter the data.
+            # start_period = (months(as.numeric(start_month)) + days(start_day))
+            # end_period = (months(as.numeric(end_month)) + days(end_day))
+            #
+            # # Perform check that end period is later than start period
+            # date_check = start_period < end_period
+            # # If it's not, give a warning.
+            # shinyFeedback::feedbackWarning("end_month", !date_check, "End date must be later than start date")
+            # # Date check must be TRUE to proceed.
+            # req(date_check)
 
-            # Perform check that end period is later than start period
-            date_check = start_period < end_period
-            # If it's not, give a warning.
-            shinyFeedback::feedbackWarning("end_month", !date_check, "End date must be later than start date")
-            # Date check must be TRUE to proceed.
-            req(date_check)
+            # # Filter data.
+            # dat = dat %>%
+            #   mutate(Year = year(Date),
+            #          Month = month(Date),
+            #          Day = day(Date),
+            #          this_period = c(months(Month) + days(Day))) %>%
+            #   filter(this_period >= start_period,
+            #          this_period <= end_period) %>%
+            #   dplyr::select(-this_period,-Day)
 
-            # Filter data.
-            dat = dat %>%
-              mutate(Year = year(Date),
-                     Month = month(Date),
-                     Day = day(Date),
-                     this_period = c(months(Month) + days(Day))) %>%
-              filter(this_period >= start_period,
-                     this_period <= end_period) %>%
-              dplyr::select(-this_period,-Day)
+            dat_select_months = dat %>%
+              mutate(Month = lubridate::month(Date)) %>%
+              filter(Month %in% c(start_month,end_month))
+
+            rm(dat)
+
+            dat = dat_select_months %>%
+              mutate(Day = lubridate::day(Date)) %>%
+              filter((Month == start_month & Day >= start_day) | (Month > start_month & Month < end_month) | (Month == end_month & Day <= end_day))
+
             #Update progress bar...
             incProgress(1 / 2)
           }

@@ -11,12 +11,10 @@
 # See the License for the specific language governing permissions and limitations under the License.
 
 source('UI.R')
-source('utils/first_run_funcs.R')
 source('utils/stats_funcs.R')
 source('utils/plot_funcs.R')
 source('utils/leafmap_funcs.R')
 source('utils/load_stations.R')
-source('modules/ask_user_for_dir.R')
 source('modules/filter_data.R')
 source('modules/add_metric_to_dat.R')
 source('modules/calc_mk_results.R')
@@ -37,7 +35,7 @@ ui = page_fillable(
 
   shinyFeedback::useShinyFeedback(),
 
-  ask_user_for_dir_ui('dir'),
+  # ask_user_for_dir_ui('dir'),
 
   layout_sidebar(
     sidebar = the_sidebar,
@@ -51,13 +49,19 @@ ui = page_fillable(
 server <- function(input, output) {
 
   # Module that asks the user for their choice of directory.
-  tempfiles_folder = ask_user_for_dir_server('dir')
+  # tempfiles_folder = ask_user_for_dir_server('dir')
+  tempfiles_folder = reactiveVal('./')
 
-  # Once user has selected a filepath, remove modal.
-  observeEvent(input$submit_filepath, removeModal())
+  # Probably unnecessary once the app is published...
+  if(!str_detect(getwd(),".*www$")){
+    setwd(paste0(getwd(),"/www"))
+  }
 
-  # Create reactive for path to Hydat database.
-  hydat_path = reactive(paste0(tempfiles_folder(),'Hydat.sqlite3'))
+  # # Once user has selected a filepath, remove modal.
+  # observeEvent(input$submit_filepath, removeModal())
+
+  # # Create reactive for path to Hydat database.
+  # hydat_path = reactive(paste0(tempfiles_folder(),'Hydat.sqlite3'))
 
   # Get user variable choice
   user_var = reactive(input$user_var_choice)
@@ -80,7 +84,8 @@ server <- function(input, output) {
   # Get the stations
   stations_sf = reactive({
     #Utils function to read in stations from HYDAT, convert to sf.
-    stations = get_station_sf(stations_list(), hydat_path = hydat_path())
+    # stations = get_station_sf(stations_list(), hydat_path = hydat_path())
+    stations = read_sf('stations.gpkg')
 
     #If the user has selected a shape on the leaflet map, filter stations.
     if(click_shape() != 'no_selection'){
@@ -160,11 +165,11 @@ server <- function(input, output) {
             st_bbox() %>%
             st_as_sfc()
             ),
-           ecoprov = read_sf('www/ecoprovinces.gpkg') %>% st_transform(crs = 4326),
-           ecoreg = read_sf('www/ecoregions.gpkg') %>% st_transform(crs = 4326),
-           ecosec = read_sf('www/ecosections.gpkg') %>% st_transform(crs = 4326),
-           nr_dist = read_sf('www/nr_districts.gpkg') %>% st_transform(crs = 4326),
-           nr_reg = read_sf('www/nr_regions.gpkg') %>% st_transform(crs = 4326))
+           ecoprov = read_sf('ecoprovinces.gpkg') %>% st_transform(crs = 4326),
+           ecoreg = read_sf('ecoregions.gpkg') %>% st_transform(crs = 4326),
+           ecosec = read_sf('ecosections.gpkg') %>% st_transform(crs = 4326),
+           nr_dist = read_sf('nr_districts.gpkg') %>% st_transform(crs = 4326),
+           nr_reg = read_sf('nr_regions.gpkg') %>% st_transform(crs = 4326))
   })
 
   # Render summary values for sidebar.
