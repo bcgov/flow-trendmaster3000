@@ -16,6 +16,9 @@ library(shinyFeedback)
 
 source('modules/filter_data.R')
 
+spacer_line = HTML("<hr>")
+spacer_line_no_margin = HTML("<hr style = 'margin-top:0;margin-bottom:0;'>")
+
 number_stations_vb = value_box(
   "Number of Stations",
   span(
@@ -46,7 +49,7 @@ number_stations_increasing = value_box(
 
 var_choice_bit = selectizeInput(
   inputId = 'user_var_choice',
-  label = 'Trend to Display',
+  label = '',
   choices = c('Average Flow' = 'Average',
               'Date of 50% Flow' = 'DoY_50pct_TotalQ',
               'Minimum Flow (7-day)' = 'Min_7_Day',
@@ -58,15 +61,24 @@ var_choice_bit = selectizeInput(
   selected = 'Average',
   width = '100%')
 
+region_selector_bits = tagList(
+  actionButton(inputId = 'reset_shape_sel',
+               label = 'Reset Shape Selection'),
+  actionButton(inputId = 'select_all_stats_in_shape',
+               label = 'Select All Stations in Shape')
+)
+
 multi_switch = shinyWidgets::switchInput(inputId = "multi_station",
                           label = 'Station Selection Mode',
                           value = FALSE,
                           onLabel = 'Multi',
                           offLabel = 'Single')
 
+
+
 map_shape_bit = selectizeInput(
   inputId = 'user_shape_choice',
-  label = 'Region Type',
+  label = 'Add Shapes',
   choices = c('None' = 'none',
               'Ecoprovinces' = 'ecoprov',
               'Ecoregions' = 'ecoreg',
@@ -94,10 +106,17 @@ hydrograph = tagList(
 map = leafletOutput('leafmap', height = '100%')
 
 sidebar_content = tagList(
+  h5("Trend to Display"),
+  spacer_line_no_margin,
   var_choice_bit,
   filter_data_Mod_UI('data'),
-  map_shape_bit,
+  h5("Station Selection\nTools"),
+  spacer_line,
   multi_switch,
+  map_shape_bit,
+  region_selector_bits,
+  # HTML("<br>"),
+  spacer_line,
   number_stations_vb,
   number_stations_declining,
   number_stations_increasing
@@ -105,7 +124,8 @@ sidebar_content = tagList(
 
 the_sidebar = sidebar(
   width = '20%',
-  sidebar_content
+  sidebar_content,
+  bg = '#ADD8E7'
 )
 
 main_bit = tagList(

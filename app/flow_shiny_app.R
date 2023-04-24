@@ -20,16 +20,16 @@ source('modules/add_metric_to_dat.R')
 source('modules/calc_mk_results.R')
 
 my_theme = bs_theme(bootswatch = 'flatly',
-                    danger = "#cc0000",
-                    primary = '#3399ff',
-                    font_scale = 0.75)
-
-
+                    # danger = "#cc0000",
+                    # primary = '#3399ff',
+                    # "sidebar-bg" = '#ADD8E7',
+                    font_scale = 0.75) %>%
+  bs_add_rules("#trend_selector {opacity:0.5;}
+                #trend_selector:hover{opacity:0.95;}
+                #reset_shape_sel{background-color:#2c3e50;}
+                #select_all_stats_in_shape{background-color:#2c3e50;}")
 
 ui = page_fillable(
-  tags$head(tags$style(
-    HTML('#trend_selector {opacity:0.5;}
-          #trend_selector:hover{opacity:0.9;}'))),
 
   theme = my_theme,
 
@@ -233,6 +233,19 @@ server <- function(input, output) {
   # Also, when the user changes the region shape, reset the clicked shape to 'no_selection'
   observeEvent(input$user_shape_choice, {
     click_shape('no_selection')
+  })
+
+  # React to 'Undo Selection' Button
+  observeEvent(input$reset_shape_sel,{
+    click_shape('no_selection')
+  })
+
+  # React to 'Select All' Button
+  observeEvent(input$select_all_stats_in_shape, {
+
+    req(input$multi_station == TRUE)
+
+    click_station(stations_sf()$STATION_NUMBER)
   })
 
   output$selected_station = renderText({paste0("Station: ",click_station())})
