@@ -69,22 +69,30 @@ region_selector_bits = tagList(
 )
 
 multi_switch = shinyWidgets::switchInput(inputId = "multi_station",
-                          label = 'Station Selection Mode',
-                          value = FALSE,
-                          onLabel = 'Multi',
-                          offLabel = 'Single')
+                                         label = 'Station Selection Mode',
+                                         value = FALSE,
+                                         onLabel = 'Multi',
+                                         offLabel = 'Single')
 
+# multi_switch = selectInput(
+#   inputId = 'viz_mode',
+#   choices = c("Single Station","Multi-Station","Provincial Delineations"),
+#   selected = 'Single Station',
+#   selectize = F
+# )
 
 
 map_shape_bit = selectizeInput(
   inputId = 'user_shape_choice',
   label = 'Add Shapes',
   choices = c('None' = 'none',
+              'Subwatershed Groups' = 'subw',
               'Ecoprovinces' = 'ecoprov',
               'Ecoregions' = 'ecoreg',
               'Ecosections' = 'ecosec',
               'Natural Resource Districts' = 'nr_dist',
-              'Natural Resource Regions' = 'nr_reg'),
+              'Natural Resource Regions' = 'nr_reg',
+              'Drawn Shape' = 'drawn_shape'),
   selected = 'None'
 )
 
@@ -125,19 +133,26 @@ sidebar_content = tagList(
 the_sidebar = sidebar(
   width = '20%',
   sidebar_content,
-  bg = '#ADD8E7'
+  bg = '#ADD8E7',
+  open = 'always'
 )
 
 main_bit = tagList(
-  map,
+  absolutePanel(map,
+                top = 0, bottom = 0, left = '20%', right = 0),
+  # card(
   absolutePanel(
     id = 'trend_selector',
-    top = '60%', left = '22%', right = '2%', height = '25%',
-    bslib::navs_pill(
-      id = 'tabset',
-      nav(title = 'Flow Metric Plot', station_plot),
-      nav(title = 'Hydrograph', hydrograph),
-      nav(title = 'Data Download', data_download_bit)
+    top = '70%', left = '20%', right = '0%', height = '50%',
+     card(
+      full_screen = TRUE,
+      bslib::navs_pill_card(
+        id = 'tabset',
+        # full_screen = TRUE,
+        nav(title = 'Flow Metric Plot', station_plot),
+        nav(title = 'Hydrograph', hydrograph),
+        nav(title = 'Data Download', data_download_bit)
+       )
     )
   )
 )

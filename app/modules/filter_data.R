@@ -182,7 +182,7 @@ filter_data_Mod_Server = function(id, flow_dat_daily, shape){
       # Second filtering cut: Time scale ---------------------------------
       dat_tscale_filtered = reactive({
         req(!is.null(finegrain_selector_reactive()) | input$scale_selector_radio == 'Annual')
-
+browser()
         dat = dat_period_filtered()
 
         if(input$scale_selector_radio == 'Annual') {

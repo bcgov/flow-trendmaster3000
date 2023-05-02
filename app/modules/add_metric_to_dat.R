@@ -6,7 +6,7 @@ add_metric_to_dat_mod <- function(id, flow_dat_daily = flow_dat_daily,
     function(input, output, session) {
 
       dat_with_metric = reactive({
-
+# browser()
         withProgress(message = 'calculating metric', {
 
           req(!is.null(data()))

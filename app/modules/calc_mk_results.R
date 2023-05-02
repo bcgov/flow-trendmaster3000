@@ -5,7 +5,7 @@ calculate_mk_mod <- function(id, data, user_var_choice) {
     function(input, output, session) {
 
       d_with_mk = reactive({
-
+# browser()
         chosen_variable = user_var_choice()
 
         data() |>
