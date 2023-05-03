@@ -110,7 +110,10 @@ server <- function(input, output) {
   # Use the metric-adding module on the filtered data.
   dat_with_metric <- add_metric_to_dat_mod("data2",
                                            data = filtering_mod_output$dat_filtered,
-                                           user_var_choice = user_var)
+                                           user_var_choice = reactive(input$user_var_choice),
+                                           user_period_choice = filtering_mod_output$user_period_choice,
+                                           scale_selector_radio = filtering_mod_output$scale_selector_radio,
+                                           finegrain_reactives_list = filtering_mod_output$finegrain_reactives_list)
 
   # Run the Mann-Kendall trend analysis on the data with metric.
   mk_results <- calculate_mk_mod('mk_res',

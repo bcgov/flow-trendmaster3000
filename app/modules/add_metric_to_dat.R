@@ -1,6 +1,9 @@
 
 add_metric_to_dat_mod <- function(id, flow_dat_daily = flow_dat_daily,
-                                  data, user_var_choice) {
+                                  data, user_var_choice,
+                                  user_period_choice,
+                                  scale_selector_radio,
+                                  finegrain_reactives_list) {
   moduleServer(
     id,
     function(input, output, session) {
@@ -117,7 +120,11 @@ add_metric_to_dat_mod <- function(id, flow_dat_daily = flow_dat_daily,
             ungroup()
           return(dat)
         })
-      })
+      }) %>%
+        bindCache(user_var_choice(),
+                  user_period_choice(),
+                  scale_selector_radio(),
+                  finegrain_reactives_list())
       return(dat_with_metric)
     }
   )
