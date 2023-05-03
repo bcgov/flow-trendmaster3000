@@ -13,3 +13,5 @@ shinycannon-1.1.3-dd43f6b.jar
 shinyloadtest_report.html
 test-logs**
 recording.log
+shinyloadtesting/**
+data_preprocessing/data/**

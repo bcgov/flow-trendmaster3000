@@ -70,7 +70,8 @@ server <- function(input, output) {
   # Load in data ----------------------------------------------------
 
   ## raw flow data.
-  flow_dat_daily = feather::read_feather("daily_flow_records.feather")
+  # flow_dat_daily = feather::read_feather("daily_flow_records.feather")
+  flow_dat_daily = qs::qread("daily_flow_records.qs")
 
   bc_boundary = read_sf('bc_bound.gpkg') %>%
     st_transform(crs = 4326) %>%
