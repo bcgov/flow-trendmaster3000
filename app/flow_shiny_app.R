@@ -74,9 +74,8 @@ server <- function(input, output) {
 
   # Attach the MK results to the data with metric.
   flow_dat_with_mk = reactive({
-    print('making flow_dat_with_mk')
-    dat_with_metric() %>%
-      left_join(mk_results())
+      dat_with_metric() %>%
+        left_join(mk_results())
   })
 
   # If the user draws a poly, create a reactive polygon spatial object from it.
@@ -104,7 +103,7 @@ server <- function(input, output) {
   # Add the flow data with MK trend results to the
   # spatial object of all the stations.
   stations_sf_with_trend = reactive({
-    browser()
+
     req(exists('stations_sf'),flow_dat_daily)
     print('joining stations sf to MK results')
     dat = stations_sf %>%

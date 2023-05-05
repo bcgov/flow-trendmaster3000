@@ -1,8 +1,15 @@
 
-calculate_mk_mod <- function(id, data, stations_to_process = 200, user_var_choice) {
+calculate_mk_mod <- function(id, data, processed_stations, number_stations_to_process = 200, user_var_choice) {
   moduleServer(
     id,
     function(input, output, session) {
+      browser()
+
+      # Get subset of 200 stations.
+      stations_to_process = reactive({
+        unique(data()$STATION_NUMBER)[c(1:number_stations_to_process)]
+      })
+
 
       d_with_mk = reactive({
 

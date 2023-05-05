@@ -1,5 +1,5 @@
 station_flow_plot = function(data,variable_choice,clicked_station,stations_shapefile,slopes,caption_label){
-  browser()
+
   label.frame = data.frame(varname = c('Average',
                                        'DoY_50pct_TotalQ','Min_7_Day',
                                        'Min_7_Day_DoY','Min_30_Day',
