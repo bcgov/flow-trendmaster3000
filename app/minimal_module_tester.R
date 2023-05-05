@@ -38,7 +38,7 @@ server <- function(input, output, session) {
   }
 
 
-  flow_dat_daily = feather::read_feather("daily_flow_records.feather")
+  flow_dat_daily = qs::qread("daily_flow_records.qs")
 
   bc_boundary = read_sf('bc_bound.gpkg') %>%
     st_transform(crs = 4326) %>%
@@ -62,10 +62,14 @@ server <- function(input, output, session) {
                                            finegrain_reactives_list = filtering_mod_output$finegrain_reactives_list)
 
   output$nrows = renderText({
+    req(!is.null(filtering_mod_output$dat_filtered()))
     paste0("Filtered Data: ",nrow(filtering_mod_output$dat_filtered()))
   })
 
-  output$dat_with_metric = DT::renderDT(dat_with_metric())
+  output$dat_with_metric = DT::renderDT({
+    req(input$user_var_choice)
+    dat_with_metric()
+    })
 }
 
 shinyApp(ui, server)

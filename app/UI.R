@@ -66,7 +66,7 @@ region_selector_bits = tagList(
   actionButton(inputId = 'reset_shape_sel',
                label = 'Reset Shape Selection'),
   actionButton(inputId = 'select_all_stats_in_shape',
-               label = 'Select All Stations in Shape')
+               label = 'Select Stations in Shape')
 )
 
 multi_switch = shinyWidgets::switchInput(inputId = "multi_station",
@@ -74,13 +74,6 @@ multi_switch = shinyWidgets::switchInput(inputId = "multi_station",
                                          value = FALSE,
                                          onLabel = 'Multi',
                                          offLabel = 'Single')
-
-# multi_switch = selectInput(
-#   inputId = 'viz_mode',
-#   choices = c("Single Station","Multi-Station","Provincial Delineations"),
-#   selected = 'Single Station',
-#   selectize = F
-# )
 
 
 map_shape_bit = selectizeInput(
@@ -158,3 +151,25 @@ main_bit = tagList(
   )
 )
 
+my_theme = bs_theme(bootswatch = 'flatly',
+                    # danger = "#cc0000",
+                    # primary = '#3399ff',
+                    # "sidebar-bg" = '#ADD8E7',
+                    font_scale = 0.75) %>%
+  # For below, we had '#trend_selector:hover{opacity:0.95;}'
+  bs_add_rules("#trend_selector {opacity:0.5;}
+                #trend_selector:hover{opacity:1;}
+                #reset_shape_sel{background-color:#2c3e50;}")
+
+ui = page_fillable(
+
+  theme = my_theme,
+
+  shinyFeedback::useShinyFeedback(),
+
+  layout_sidebar(
+    sidebar = the_sidebar,
+    main_bit,
+    textOutput('stations_selected')
+  )
+)

@@ -15,100 +15,51 @@ source('utils/stats_funcs.R')
 source('utils/plot_funcs.R')
 source('utils/leafmap_funcs.R')
 source('utils/load_stations.R')
+source('utils/make_poly_from_drawing.R')
 source('modules/filter_data.R')
 source('modules/add_metric_to_dat.R')
 source('modules/calc_mk_results.R')
 
-my_theme = bs_theme(bootswatch = 'flatly',
-                    # danger = "#cc0000",
-                    # primary = '#3399ff',
-                    # "sidebar-bg" = '#ADD8E7',
-                    font_scale = 0.75) %>%
-  # For below, we had '#trend_selector:hover{opacity:0.95;}'
-  bs_add_rules("#trend_selector {opacity:0.5;}
-                #trend_selector:hover{opacity:1;}
-                #reset_shape_sel{background-color:#2c3e50;}
-                #select_all_stats_in_shape{background-color:#2c3e50;}")
-
-ui = page_fillable(
-
-  theme = my_theme,
-
-  shinyFeedback::useShinyFeedback(),
-
-  # ask_user_for_dir_ui('dir'),
-
-  layout_sidebar(
-    sidebar = the_sidebar,
-    main_bit,
-    textOutput('stations_selected')
-  )
-)
-
-
 
 server <- function(input, output) {
 
-  # Module that asks the user for their choice of directory.
-  # tempfiles_folder = ask_user_for_dir_server('dir')
-  tempfiles_folder = reactiveVal('./')
+  # Load in data ----------------------------------------------------
 
   # Probably unnecessary once the app is published...
   if(!str_detect(getwd(),".*www$")){
     setwd(paste0(getwd(),"/www"))
   }
 
-  # # Once user has selected a filepath, remove modal.
-  # observeEvent(input$submit_filepath, removeModal())
-
-  # # Create reactive for path to Hydat database.
-  # hydat_path = reactive(paste0(tempfiles_folder(),'Hydat.sqlite3'))
-
-  # Get user variable choice
-  user_var = reactive(input$user_var_choice)
-
-  # Load in data ----------------------------------------------------
-
-  ## raw flow data.
-  # flow_dat_daily = feather::read_feather("daily_flow_records.feather")
+  ## Raw flow data.
   flow_dat_daily = qs::qread("daily_flow_records.qs")
 
+  ## BC spatial file.
   bc_boundary = read_sf('bc_bound.gpkg') %>%
     st_transform(crs = 4326) %>%
     mutate(shape_name = 'unselected area')
 
-  # output$number_rows_raw_dat = renderText(nrow(filtering_mod_output$dat_filtered()))
+  ## Stations spatial file.
+  stations_sf = read_sf('stations.gpkg')
 
-  # ## List of stations to include.
-  # stations_list = reactive({
-  #   read.csv('filtered_station_list.csv') |>
-  #     pull(STATION_NUMBER)
-  # })
+  # Set up reactives -------------------------------------------------
 
-  # # Get the stations
-  # stations_sf = reactive({
-  #
-  #   stations = read_sf('stations.gpkg')
-  #
-  #   #If the user has selected a shape on the leaflet map, filter stations.
-  #   if(click_shape() != 'no_selection'){
-  #     stations = stations %>%
-  #       st_join(shape_for_map() %>% filter(shape_name == click_shape()), st_intersects) %>%
-  #       filter(!is.na(shape_name)) %>%
-  #       dplyr::select(-shape_name)
-  #   }
-  #
-  #   stations
-  # })
-  stations_sf = read_sf('stations.gpkg') %>%
-    mutate(internal_id = c(1:nrow(.)))
+  # Get user variable choice, make sure it's reactive.
+  user_var = reactive(input$user_var_choice)
+
+  # Modules ----------------------------------------------------------
 
   # Use the data filtering module on the raw data.
+  # The result is a list with 4 elements: the filtered data,
+  # the user period choice (e.g. all data, or just 2010 -> recent),
+  # the scale selector (e.g. annual, or monthly, etc.),
+  # and the finegrained reactive filter.
   filtering_mod_output <- filter_data_Mod_Server("data",
                                                  flow_dat_daily,
                                                  shape = click_shape)
 
   # Use the metric-adding module on the filtered data.
+  # Whichever metric the user has chosen will be calculated
+  # across the time scale selected and joined to the data.
   dat_with_metric <- add_metric_to_dat_mod("data2",
                                            data = filtering_mod_output$dat_filtered,
                                            user_var_choice = reactive(input$user_var_choice),
@@ -123,39 +74,29 @@ server <- function(input, output) {
 
   # Attach the MK results to the data with metric.
   flow_dat_with_mk = reactive({
+    print('making flow_dat_with_mk')
     dat_with_metric() %>%
       left_join(mk_results())
   })
 
-  # If the user draws a poly, draw it here.
+  # If the user draws a poly, create a reactive polygon spatial object from it.
   drawn_poly = eventReactive(input$leafmap_draw_new_feature, {
+    return(
+      make_poly_from_drawing(input$leafmap_draw_new_feature$geometry$coordinates) %>%
+      rename('geom' = geometry)
+    )
+  })
 
-    drawn_poly = as.data.frame(matrix(unlist(input$leafmap_draw_new_feature$geometry$coordinates), ncol = 2, byrow = T))
-
-    names(drawn_poly) = c("lon","lat")
-
-    drawn_poly = st_as_sf(drawn_poly, coords = c("lon","lat"), crs = 4326)
-
-    drawn_poly = drawn_poly %>%
-      summarise(geometry = st_combine(geometry)) %>%
-      st_cast("POLYGON") %>%
-      mutate(shape_name = 'drawn_poly')
-
-    # And update the drop-down shape selector to 'drawn poly'
-    # as well as updating the selected polygon to our drawn poly.
+  # And once a polygon is drawn, switch the shape dropdown to 'drawn_shape'
+  observeEvent(input$leafmap_draw_new_feature, {
     updateSelectInput(inputId = 'user_shape_choice',
                       selected = 'drawn_shape')
     click_shape('drawn_poly')
-    # browser()
-    return(
-      sf::st_difference(bc_boundary, drawn_poly) %>%
-        bind_rows(
-        drawn_poly %>% dplyr::rename('geom' = geometry)
-      )
-    )
-
-
   })
+
+  # Set up reactive values that store the clicked station and map shape
+  click_station <- reactiveVal('no_selection')
+  click_shape <- reactiveVal('no_selection')
 
   # Specify which variables are 'Date' variables (for plot labelling)
   date_vars = c("Min_7_Day_DoY","DoY_50pct_TotalQ")
@@ -163,9 +104,9 @@ server <- function(input, output) {
   # Add the flow data with MK trend results to the
   # spatial object of all the stations.
   stations_sf_with_trend = reactive({
-
+    browser()
     req(exists('stations_sf'),flow_dat_daily)
-
+    print('joining stations sf to MK results')
     dat = stations_sf %>%
       left_join(mk_results())
 
@@ -191,25 +132,8 @@ server <- function(input, output) {
                      'Non-Significant Trend Up',
                      'Significant Trend Up')))
     }
+
     return(dat)
-  })
-
-  # If the user clicks on a shape on the map,
-  # just keep the stations in within that shape.
-  stations_sf_with_trend_in_shape = reactive({
-
-    stations_sf = stations_sf_with_trend()
-
-    #If the user has selected a shape on the leaflet map, filter stations.
-    if(click_shape() != 'no_selection'){
-      stations_sf = stations_sf %>%
-        st_join(shape_for_map() %>% filter(shape_name == click_shape()), st_intersects) %>%
-        filter(!is.na(shape_name)) %>%
-        dplyr::select(-shape_name)
-    }
-
-    #Otherwise, all good!
-    stations_sf
   })
 
   ## Shapes for leaflet map station filtering.
@@ -233,6 +157,24 @@ server <- function(input, output) {
            drawn_shape = drawn_poly())
   })
 
+  # If the user clicks on a shape on the map,
+  # just keep the stations within that shape.
+  stations_sf_with_trend_in_shape = reactive({
+
+    #If the user has selected a shape on the leaflet map, filter stations.
+    if(click_shape() != 'no_selection'){
+      return(
+        stations_sf_with_trend() %>%
+          filter(shape_name == click_shape())
+      )
+    } else {
+
+      return(stations_sf_with_trend())
+
+    }
+
+  })
+
   # Render summary values for sidebar.
   output$num_stations_on_plot = renderText({nrow(stations_sf_with_trend_in_shape() %>% filter(!is.na(trend_sig)))})
 
@@ -243,13 +185,10 @@ server <- function(input, output) {
   output$num_stations_inc = renderText({nrow(stations_sf_with_trend_in_shape() |>
                                                filter(trend_sig %in% c('Significant Trend Later',
                                                                        'Significant Trend Up')))})
-  # Set up reactive values that store the clicked station and map shape
-  click_station <- reactiveVal('no_selection')
-  click_shape <- reactiveVal('no_selection')
 
   # Get Mann-Kendall trend slope and intercept for our station-specific plot.
   senslope_dat = reactive({
-    #
+
     flow_dat_with_mk() %>%
       filter(STATION_NUMBER %in% click_station()) %>%
       left_join(stations_sf %>%
@@ -322,7 +261,6 @@ server <- function(input, output) {
 
   output$myplot = renderPlotly({
     p = station_flow_plot(data = dat_with_metric(),
-                          # variable_choice = input$user_var_choice,
                           variable_choice = user_var(),
                           clicked_station = click_station(),
                           stations_shapefile = stations_sf,
@@ -333,7 +271,6 @@ server <- function(input, output) {
 
   output$my_hydrograph = renderPlotly({
     h = hydrograph_plot(
-      #dat = flow_dat_daily(),
       dat = filtering_mod_output$dat_filtered(),
       clicked_station = click_station(),
       stations_shapefile = stations_sf)
@@ -377,6 +314,7 @@ server <- function(input, output) {
   })
 
   my_pal_shape = eventReactive(input$user_shape_choice, {
+    # browser()
     if(input$user_shape_choice == 'none') return(colorFactor(palette = '#808080', domain = 1))
 
     colorNumeric(palette = 'RdBu',
@@ -392,6 +330,7 @@ server <- function(input, output) {
     update_leaflet(map = 'leafmap',
                    stations = stations_sf_with_trend(),
                    clicked_station = click_station(),
+                   shape_type = reactive(input$user_shape_choice),
                    shapes = shape_for_map(),
                    clicked_shape = click_shape(),
                    pal = mypal())
