@@ -31,7 +31,7 @@ server <- function(input, output) {
   }
 
   ## Raw flow data.
-  flow_dat_daily = qs::qread("daily_flow_records.qs")
+  flow_dat_daily = qs::qread("daily_flow_records_passes_qaqc.qs")
 
   ## BC spatial file.
   bc_boundary = read_sf('bc_bound.gpkg') %>%
