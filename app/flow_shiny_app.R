@@ -31,7 +31,10 @@ server <- function(input, output) {
   }
 
   ## Raw flow data.
-  flow_dat_daily = qs::qread("daily_flow_records_passes_qaqc.qs")
+  flow_dat_daily = qs::qread("daily_flow_records.qs")
+
+  # set data as a data.table object.
+  setDT(flow_dat_daily)
 
   ## BC spatial file.
   bc_boundary = read_sf('bc_bound.gpkg') %>%
@@ -46,6 +49,19 @@ server <- function(input, output) {
   # Get user variable choice, make sure it's reactive.
   user_var = reactive(input$user_var_choice)
 
+  # EXPERIMENTAL - ALWAYS have at least one data filter on... #
+  # Which stations to include?
+  stations_to_include = reactive({
+    stations = stations_sf[stations_sf$meets_criteria == T,]
+    # if(click_shape() != 'no_selection'){
+    #   stations = stations[get(input$user_shape_choice) %in% click_shape(), .SD]
+    # }
+  })
+
+  flow_dat_daily_starting_filter = reactive({
+    flow_dat_daily[]
+  })
+
   # Modules ----------------------------------------------------------
 
   # Use the data filtering module on the raw data.
@@ -54,8 +70,7 @@ server <- function(input, output) {
   # the scale selector (e.g. annual, or monthly, etc.),
   # and the finegrained reactive filter.
   filtering_mod_output <- filter_data_Mod_Server("data",
-                                                 flow_dat_daily,
-                                                 shape = click_shape)
+                                                 flow_dat_daily)
 
   # Use the metric-adding module on the filtered data.
   # Whichever metric the user has chosen will be calculated
@@ -104,14 +119,16 @@ server <- function(input, output) {
   # spatial object of all the stations.
   stations_sf_with_trend = reactive({
 
-    req(exists('stations_sf'),flow_dat_daily)
-    print('joining stations sf to MK results')
-    dat = stations_sf %>%
-      left_join(mk_results())
+    # req(stations_to_include(),mk_results())
+    stations.dt = as.data.table(stations_to_include())
+    mk_results.dt = as.data.frame(mk_results())
+
+    dat = st_as_sf(data.table::merge.data.table(stations.dt, mk_results.dt))
 
     # Is the chosen variable one of the 'date' variables?
     # If so, update the MK trend labels to say 'earlier' or 'later'
     # rather than 'up' or 'down'.
+
     if(user_var() %in% date_vars){
       dat = dat %>%
         mutate(trend_sig = factor(
@@ -159,31 +176,49 @@ server <- function(input, output) {
   # If the user clicks on a shape on the map,
   # just keep the stations within that shape.
   stations_sf_with_trend_in_shape = reactive({
-
+    # browser()
     #If the user has selected a shape on the leaflet map, filter stations.
     if(click_shape() != 'no_selection'){
+      # If it is a custom drawn polygon, we must do a spatial match here.
+      if(click_shape() == 'drawn_poly'){
+
+        return(stations_sf_with_trend() %>%
+          st_join(shape_for_map() %>% filter(shape_name == click_shape()), st_intersects) %>%
+          filter(!is.na(shape_name)) %>%
+          dplyr::select(-shape_name)
+        )
+
+      } else {
       return(
         stations_sf_with_trend() %>%
-          filter(shape_name == click_shape())
+          filter(!!sym(input$user_shape_choice) == click_shape())
       )
+      }
     } else {
-
       return(stations_sf_with_trend())
-
     }
 
   })
 
   # Render summary values for sidebar.
-  output$num_stations_on_plot = renderText({nrow(stations_sf_with_trend_in_shape() %>% filter(!is.na(trend_sig)))})
+  output$num_stations_on_plot = renderText({
+    req(stations_sf_with_trend_in_shape())
+    nrow(stations_sf_with_trend_in_shape() %>% filter(!is.na(trend_sig)))
+    })
 
-  output$num_stations_dec = renderText({nrow(stations_sf_with_trend_in_shape() |>
-                                               filter(trend_sig %in% c('Significant Trend Earlier',
-                                                                       'Significant Trend Down')))})
+  output$num_stations_dec = renderText({
+    req(stations_sf_with_trend_in_shape())
+    nrow(stations_sf_with_trend_in_shape() |>
+           filter(trend_sig %in% c('Significant Trend Earlier',
+                                   'Significant Trend Down')))
+    })
 
-  output$num_stations_inc = renderText({nrow(stations_sf_with_trend_in_shape() |>
-                                               filter(trend_sig %in% c('Significant Trend Later',
-                                                                       'Significant Trend Up')))})
+  output$num_stations_inc = renderText({
+    req(stations_sf_with_trend_in_shape())
+    nrow(stations_sf_with_trend_in_shape() |>
+           filter(trend_sig %in% c('Significant Trend Later',
+                                   'Significant Trend Up')))
+    })
 
   # Get Mann-Kendall trend slope and intercept for our station-specific plot.
   senslope_dat = reactive({
@@ -202,7 +237,7 @@ server <- function(input, output) {
   # 1. Update selection of marker.
   observeEvent(input$leafmap_marker_click, {
     # Capture the info of the clicked polygon. We use this for filtering.
-
+    print(click_station())
     # Note - are we in 'multiple station select mode', or
     # 'single station select mode'? If multiple,
     # keep station IDs as we click them.
@@ -219,6 +254,7 @@ server <- function(input, output) {
 
   # 1. AND/OR Update selection of shape.
   observeEvent(input$leafmap_shape_click, {
+
     # Capture the info of the clicked polygon.
     # If different from current selection, update selection.
     if(click_shape() != input$leafmap_shape_click$id){
@@ -242,8 +278,8 @@ server <- function(input, output) {
   observeEvent(input$select_all_stats_in_shape, {
 
     req(input$multi_station == TRUE)
-
-    click_station(stations_sf$STATION_NUMBER)
+    click_station(c(stations_sf_with_trend_in_shape()$STATION_NUMBER))
+    print(click_station())
   })
 
   output$selected_station = renderText({paste0("Station: ",click_station())})
@@ -262,7 +298,7 @@ server <- function(input, output) {
     p = station_flow_plot(data = dat_with_metric(),
                           variable_choice = user_var(),
                           clicked_station = click_station(),
-                          stations_shapefile = stations_sf,
+                          stations_shapefile = stations_to_include(),
                           slopes = senslope_dat(),
                           caption_label = date_choice_label())
     ggplotly(p)
@@ -313,7 +349,7 @@ server <- function(input, output) {
   })
 
   my_pal_shape = eventReactive(input$user_shape_choice, {
-    # browser()
+
     if(input$user_shape_choice == 'none') return(colorFactor(palette = '#808080', domain = 1))
 
     colorNumeric(palette = 'RdBu',
@@ -326,8 +362,9 @@ server <- function(input, output) {
   })
 
   observe({
+
     update_leaflet(map = 'leafmap',
-                   stations = stations_sf_with_trend(),
+                   stations = stations_sf_with_trend_in_shape(),
                    clicked_station = click_station(),
                    shape_type = reactive(input$user_shape_choice),
                    shapes = shape_for_map(),

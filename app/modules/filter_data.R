@@ -30,7 +30,7 @@ filter_data_Mod_UI = function(id){
 }
 
 # Module server filters data based on inputs from user.
-filter_data_Mod_Server = function(id, flow_dat_daily, shape){
+filter_data_Mod_Server = function(id, flow_dat_daily, stations, include_poor_qaqc_data){
 
   moduleServer(
     id,
@@ -115,10 +115,12 @@ filter_data_Mod_Server = function(id, flow_dat_daily, shape){
           #Update progress bar...
           incProgress(1 / 2)
 
+          if(scale_selector == 'Annual'){
+            dat = dat[meets_dat_qual_check == T]
+          }
           #In the case of monthly timescale, filter down to month of interest.
           if(scale_selector == 'Monthly'){
-            dat = dat %>%
-              filter(Month == finegrain_selector[1])
+            dat = dat[Month == finegrain_selector[1]]
             #Update progress bar...
             incProgress(1 / 2)
           }
@@ -132,16 +134,13 @@ filter_data_Mod_Server = function(id, flow_dat_daily, shape){
 
             req(start_month, start_day, end_month, end_day)
 
-            dat_select_months = dat %>%
-              mutate(Month = lubridate::month(Date)) %>%
-              filter(Month %in% c(start_month,end_month))
+            dat = dat[Month %in% c(start_month,end_month),
+              .(.SD[,], Day = mday(Date))
+            ][ (Month == start_month & Day >= start_day) | (Month > start_month & Month < end_month) | (Month == end_month & Day <= end_day),
+            ]
 
-            rm(dat)
-
-            dat = dat_select_months %>%
-              mutate(Day = lubridate::day(Date)) %>%
-              filter((Month == start_month & Day >= start_day) | (Month > start_month & Month < end_month) | (Month == end_month & Day <= end_day))
-
+            # setDF(dat_filtered)
+            return(dat)
             #Update progress bar...
             incProgress(1 / 2)
           }
@@ -149,46 +148,37 @@ filter_data_Mod_Server = function(id, flow_dat_daily, shape){
         })
       }
 
-      # # First filtering cut: time periods -------------------------------
-      # dat_period_filtered = reactive({
-      #   switch(input$user_period_choice,
-      #          `2010+` = flow_dat_daily %>% filter(Year >= 2010),
-      #          `1990+` = flow_dat_daily %>% filter(Year >= 1990),
-      #          `all` = flow_dat_daily
-      #   )
-      # })
 
-      # Second filtering cut: Time scale ---------------------------------
       # dat_tscale_filtered = reactive({
       dat_filtered = reactive({
         #req(!is.null(finegrain_selector_reactive()) | input$scale_selector_radio == 'Annual')
 
+        # If the user has chosen to include 'poor-quality' data,
+        # filter the dataset so that it only includes the selected stations.
         dat = switch(input$user_period_choice,
-                     `2010+` = flow_dat_daily %>% filter(Year >= 2010),
-                     `1990+` = flow_dat_daily %>% filter(Year >= 1990),
+                     `2010+` = flow_dat_daily[Year >= 2010],
+                     `1990+` = flow_dat_daily[Year >= 1990],
                      `all` = flow_dat_daily
         )
 
-        # dat = dat_period_filtered()
-
         if(input$scale_selector_radio == 'Annual') {
-          dat = finegrained_date_filter(dat, 'Annual', 'Annual')
-          return(dat)
+          return(finegrained_date_filter(dat, 'Annual', 'Annual'))
         }
 
         if(input$scale_selector_radio == 'Monthly') {
-          dat = finegrained_date_filter(dat, input$scale_selector_radio, input$finegrain_selector)
-          return(dat)
+          req(input$finegrain_selector)
+          return(finegrained_date_filter(dat, input$scale_selector_radio, input$finegrain_selector))
         }
 
         if(input$scale_selector_radio == 'Select Dates') {
-          dat = finegrained_date_filter(dat,
-                                        input$scale_selector_radio,
-                                        c(input$finegrain_selector,
-                                          input$start_day,
-                                          input$end_month,
-                                          input$end_day))
-          return(dat)
+          return(
+            finegrained_date_filter(dat,
+                                    input$scale_selector_radio,
+                                    c(input$finegrain_selector,
+                                      input$start_day,
+                                      input$end_month,
+                                      input$end_day))
+          )
         }
       }) %>%
         bindCache(input$user_period_choice,
