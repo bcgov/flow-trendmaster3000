@@ -11,10 +11,14 @@ library(tidyverse)
 library(tidyhydat)
 library(lubridate)
 library(ggtext)
-library(feather)
+# library(feather)
+library(qs)
 library(shinyFeedback)
 
 source('modules/filter_data.R')
+
+spacer_line = HTML("<hr>")
+spacer_line_no_margin = HTML("<hr style = 'margin-top:0;margin-bottom:0;'>")
 
 number_stations_vb = value_box(
   "Number of Stations",
@@ -46,7 +50,7 @@ number_stations_increasing = value_box(
 
 var_choice_bit = selectizeInput(
   inputId = 'user_var_choice',
-  label = 'Trend to Display',
+  label = '',
   choices = c('Average Flow' = 'Average',
               'Date of 50% Flow' = 'DoY_50pct_TotalQ',
               'Minimum Flow (7-day)' = 'Min_7_Day',
@@ -58,21 +62,31 @@ var_choice_bit = selectizeInput(
   selected = 'Average',
   width = '100%')
 
+region_selector_bits = tagList(
+  actionButton(inputId = 'reset_shape_sel',
+               label = 'Reset Shape Selection'),
+  actionButton(inputId = 'select_all_stats_in_shape',
+               label = 'Select Stations in Shape')
+)
+
 multi_switch = shinyWidgets::switchInput(inputId = "multi_station",
-                          label = 'Station Selection Mode',
-                          value = FALSE,
-                          onLabel = 'Multi',
-                          offLabel = 'Single')
+                                         label = 'Station Selection Mode',
+                                         value = FALSE,
+                                         onLabel = 'Multi',
+                                         offLabel = 'Single')
+
 
 map_shape_bit = selectizeInput(
   inputId = 'user_shape_choice',
-  label = 'Region Type',
+  label = 'Add Shapes',
   choices = c('None' = 'none',
+              'Subwatershed Groups' = 'subw',
               'Ecoprovinces' = 'ecoprov',
               'Ecoregions' = 'ecoreg',
               'Ecosections' = 'ecosec',
               'Natural Resource Districts' = 'nr_dist',
-              'Natural Resource Regions' = 'nr_reg'),
+              'Natural Resource Regions' = 'nr_reg',
+              'Drawn Shape' = 'drawn_shape'),
   selected = 'None'
 )
 
@@ -94,10 +108,17 @@ hydrograph = tagList(
 map = leafletOutput('leafmap', height = '100%')
 
 sidebar_content = tagList(
+  h5("Trend to Display"),
+  spacer_line_no_margin,
   var_choice_bit,
   filter_data_Mod_UI('data'),
-  map_shape_bit,
+  h5("Station Selection\nTools"),
+  spacer_line,
   multi_switch,
+  map_shape_bit,
+  region_selector_bits,
+  # HTML("<br>"),
+  spacer_line,
   number_stations_vb,
   number_stations_declining,
   number_stations_increasing
@@ -105,20 +126,50 @@ sidebar_content = tagList(
 
 the_sidebar = sidebar(
   width = '20%',
-  sidebar_content
+  sidebar_content,
+  bg = '#ADD8E7',
+  open = 'always'
 )
 
 main_bit = tagList(
-  map,
+  absolutePanel(map,
+                top = 0, bottom = 0, left = '20%', right = 0),
+  # card(
   absolutePanel(
     id = 'trend_selector',
-    top = '60%', left = '22%', right = '2%', height = '25%',
-    bslib::navs_pill(
-      id = 'tabset',
-      nav(title = 'Flow Metric Plot', station_plot),
-      nav(title = 'Hydrograph', hydrograph),
-      nav(title = 'Data Download', data_download_bit)
+    top = '70%', left = '20%', right = '0%', height = '50%',
+     card(
+      full_screen = TRUE,
+      bslib::navs_pill_card(
+        id = 'tabset',
+        # full_screen = TRUE,
+        nav(title = 'Flow Metric Plot', station_plot),
+        nav(title = 'Hydrograph', hydrograph),
+        nav(title = 'Data Download', data_download_bit)
+       )
     )
   )
 )
 
+my_theme = bs_theme(bootswatch = 'flatly',
+                    # danger = "#cc0000",
+                    # primary = '#3399ff',
+                    # "sidebar-bg" = '#ADD8E7',
+                    font_scale = 0.75) %>%
+  # For below, we had '#trend_selector:hover{opacity:0.95;}'
+  bs_add_rules("#trend_selector {opacity:0.5;}
+                #trend_selector:hover{opacity:1;}
+                #reset_shape_sel{background-color:#2c3e50;}")
+
+ui = page_fillable(
+
+  theme = my_theme,
+
+  shinyFeedback::useShinyFeedback(),
+
+  layout_sidebar(
+    sidebar = the_sidebar,
+    main_bit,
+    textOutput('stations_selected')
+  )
+)

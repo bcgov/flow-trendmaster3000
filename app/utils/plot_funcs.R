@@ -82,7 +82,6 @@ hydrograph_plot = function(dat, clicked_station, stations_shapefile){
     }
 
     plotting_df = dat %>%
-      dplyr::select(-Symbol) %>%
       filter(STATION_NUMBER %in% clicked_station) %>%
       mutate(date_for_plot = lubridate::ymd(paste0('2023-',month(Date),'-',day(Date)))) %>%
       group_by(STATION_NUMBER, date_for_plot) %>%

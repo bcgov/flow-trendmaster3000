@@ -30,7 +30,7 @@ filter_data_Mod_UI = function(id){
 }
 
 # Module server filters data based on inputs from user.
-filter_data_Mod_Server = function(id, flow_dat_daily, shape){
+filter_data_Mod_Server = function(id, flow_dat_daily, stations, include_poor_qaqc_data){
 
   moduleServer(
     id,
@@ -55,15 +55,6 @@ filter_data_Mod_Server = function(id, flow_dat_daily, shape){
                                            'Sep' = 9,'Oct' = 10,
                                            'Nov' = 11,'Dec' = 12))
         }
-        # if(scale == 'Seasonal'){
-        #   out = selectizeInput(ns('finegrain_selector'),
-        #                        label = 'Season Selector',
-        #                        multiple = F,
-        #                        choices = c('Winter (Dec-Feb)' = 'winter',
-        #                                    'Spring (Mar-May)' = 'spring',
-        #                                    'Summer (Jun-Aug)' = 'summer',
-        #                                    'Autumn (Sep-Nov)' = 'autumn'))
-        # }
         if(scale == 'Select Dates'){
           out = tagList(
             fluidRow(
@@ -108,10 +99,9 @@ filter_data_Mod_Server = function(id, flow_dat_daily, shape){
       # Reactive of user's Time Scale filter choice.
       # 1. If Annual, no filtering performed.
       # 2. If monthly, keeps data only for a given month.
-      # 3. If Seasonal, keep data only for a given season.
       # 4. If 'Select Dates', keeps data between start month and day and end month and day.
       finegrain_selector_reactive = reactive({
-        if(input$scale_selector_radio == 'Annual') return(NULL)
+        if(input$scale_selector_radio == 'Annual') return('Annual')
         input$finegrain_selector
       })
 
@@ -125,26 +115,15 @@ filter_data_Mod_Server = function(id, flow_dat_daily, shape){
           #Update progress bar...
           incProgress(1 / 2)
 
+          if(scale_selector == 'Annual'){
+            dat = dat[meets_dat_qual_check == T]
+          }
           #In the case of monthly timescale, filter down to month of interest.
           if(scale_selector == 'Monthly'){
-            dat = dat %>%
-              filter(Month == finegrain_selector[1])
+            dat = dat[Month == finegrain_selector[1]]
             #Update progress bar...
             incProgress(1 / 2)
           }
-
-          # if(scale_selector == 'Seasonal'){
-          #   dat = dat %>%
-          #     mutate(season = case_when(
-          #       Month %in% c(12,1,2) ~ 'winter',
-          #       Month %in% c(3:5) ~ 'spring',
-          #       Month %in% c(6:8) ~ 'summer',
-          #       Month %in% c(9:11) ~ 'autumn'
-          #     )) %>%
-          #     filter(season == finegrain_selector[1])
-          #   #Update progress bar...
-          #   incProgress(1 / 2)
-          # }
 
           #If custom time scale, use it here to filter data.
           if(scale_selector == 'Select Dates'){
@@ -155,26 +134,13 @@ filter_data_Mod_Server = function(id, flow_dat_daily, shape){
 
             req(start_month, start_day, end_month, end_day)
 
-            # Use {lubridate} to calculate the start and end periods. We use these to filter the data.
-            start_period = (months(as.numeric(start_month)) + days(start_day))
-            end_period = (months(as.numeric(end_month)) + days(end_day))
+            dat = dat[Month %in% c(start_month,end_month),
+              .(.SD[,], Day = mday(Date))
+            ][ (Month == start_month & Day >= start_day) | (Month > start_month & Month < end_month) | (Month == end_month & Day <= end_day),
+            ]
 
-            # Perform check that end period is later than start period
-            date_check = start_period < end_period
-            # If it's not, give a warning.
-            shinyFeedback::feedbackWarning("end_month", !date_check, "End date must be later than start date")
-            # Date check must be TRUE to proceed.
-            req(date_check)
-
-            # Filter data.
-            dat = dat %>%
-              mutate(Year = year(Date),
-                     Month = month(Date),
-                     Day = day(Date),
-                     this_period = c(months(Month) + days(Day))) %>%
-              filter(this_period >= start_period,
-                     this_period <= end_period) %>%
-              dplyr::select(-this_period,-Day)
+            # setDF(dat_filtered)
+            return(dat)
             #Update progress bar...
             incProgress(1 / 2)
           }
@@ -182,46 +148,43 @@ filter_data_Mod_Server = function(id, flow_dat_daily, shape){
         })
       }
 
-      # First filtering cut: time periods -------------------------------
-      dat_period_filtered = reactive({
-        switch(input$user_period_choice,
-               `2010+` = flow_dat_daily %>% filter(Year >= 2010),
-               `1990+` = flow_dat_daily %>% filter(Year >= 1990),
-               `all` = flow_dat_daily
+
+      # dat_tscale_filtered = reactive({
+      dat_filtered = reactive({
+        #req(!is.null(finegrain_selector_reactive()) | input$scale_selector_radio == 'Annual')
+
+        # If the user has chosen to include 'poor-quality' data,
+        # filter the dataset so that it only includes the selected stations.
+        dat = switch(input$user_period_choice,
+                     `2010+` = flow_dat_daily[Year >= 2010],
+                     `1990+` = flow_dat_daily[Year >= 1990],
+                     `all` = flow_dat_daily
         )
-      })
-
-      # Second filtering cut: Time scale ---------------------------------
-      dat_tscale_filtered = reactive({
-        req(!is.null(finegrain_selector_reactive()) | input$scale_selector_radio == 'Annual')
-
-        dat = dat_period_filtered()
 
         if(input$scale_selector_radio == 'Annual') {
-          dat = finegrained_date_filter(dat, 'Annual', 'Annual')
-          return(dat)
+          return(finegrained_date_filter(dat, 'Annual', 'Annual'))
         }
 
         if(input$scale_selector_radio == 'Monthly') {
-          dat = finegrained_date_filter(dat, input$scale_selector_radio, input$finegrain_selector)
-          return(dat)
+          req(input$finegrain_selector)
+          return(finegrained_date_filter(dat, input$scale_selector_radio, input$finegrain_selector))
         }
-
-        # if(input$scale_selector_radio == 'Seasonal') {
-        #   dat = finegrained_date_filter(dat, input$scale_selector_radio, input$finegrain_selector)
-        #   return(dat)
-        # }
 
         if(input$scale_selector_radio == 'Select Dates') {
-          dat = finegrained_date_filter(dat,
-                                        input$scale_selector_radio,
-                                        c(input$finegrain_selector,
-                                          input$start_day,
-                                          input$end_month,
-                                          input$end_day))
-          return(dat)
+          return(
+            finegrained_date_filter(dat,
+                                    input$scale_selector_radio,
+                                    c(input$finegrain_selector,
+                                      input$start_day,
+                                      input$end_month,
+                                      input$end_day))
+          )
         }
-      })
+      }) %>%
+        bindCache(input$user_period_choice,
+                  input$scale_selector_radio,
+                  # unlist(input$finegrain_selector),
+                  finegrain_reactive_list())
 
       # Make a reactive list of the finegrain_selector inputs.
       finegrain_reactive_list = reactive({
@@ -242,7 +205,8 @@ filter_data_Mod_Server = function(id, flow_dat_daily, shape){
       # Return a list of reactive outputs. If the scale selector is for
       # specific dates, return all of the start_month, start_day, end_month, and end_day
         list(
-          dat_filtered = reactive(dat_tscale_filtered()),
+          dat_filtered = reactive(dat_filtered()),
+          user_period_choice = reactive(input$user_period_choice),
           scale_selector_radio = reactive(input$scale_selector_radio),
           finegrain_reactives_list = reactive(finegrain_reactive_list())
       )
