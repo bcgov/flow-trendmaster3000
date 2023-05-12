@@ -30,7 +30,7 @@ filter_data_Mod_UI = function(id){
 }
 
 # Module server filters data based on inputs from user.
-filter_data_Mod_Server = function(id, flow_dat_daily, stations, include_poor_qaqc_data){
+filter_data_Mod_Server = function(id, flow_dat, stations){
 
   moduleServer(
     id,
@@ -156,9 +156,9 @@ filter_data_Mod_Server = function(id, flow_dat_daily, stations, include_poor_qaq
         # If the user has chosen to include 'poor-quality' data,
         # filter the dataset so that it only includes the selected stations.
         dat = switch(input$user_period_choice,
-                     `2010+` = flow_dat_daily[Year >= 2010],
-                     `1990+` = flow_dat_daily[Year >= 1990],
-                     `all` = flow_dat_daily
+                     `2010+` = flow_dat[Year >= 2010],
+                     `1990+` = flow_dat[Year >= 1990],
+                     `all` = flow_dat
         )
 
         if(input$scale_selector_radio == 'Annual') {
@@ -180,11 +180,11 @@ filter_data_Mod_Server = function(id, flow_dat_daily, stations, include_poor_qaq
                                       input$end_day))
           )
         }
-      }) %>%
-        bindCache(input$user_period_choice,
-                  input$scale_selector_radio,
-                  # unlist(input$finegrain_selector),
-                  finegrain_reactive_list())
+      }) #%>%
+        # bindCache(input$user_period_choice,
+        #           input$scale_selector_radio,
+        #           # unlist(input$finegrain_selector),
+        #           finegrain_reactive_list())
 
       # Make a reactive list of the finegrain_selector inputs.
       finegrain_reactive_list = reactive({

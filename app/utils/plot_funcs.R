@@ -1,4 +1,5 @@
-station_flow_plot = function(data,variable_choice,clicked_station,stations_shapefile,slopes,caption_label){
+station_flow_plot = function(data,variable_choice,clicked_station,stations_shapefile,slopes,
+                             caption_label){
 
   label.frame = data.frame(varname = c('Average',
                                        'DoY_50pct_TotalQ','Min_7_Day',
@@ -34,20 +35,21 @@ station_flow_plot = function(data,variable_choice,clicked_station,stations_shape
       name_for_plot = paste0("Stations: ",str_flatten_comma(clicked_station))
     }
 
-    data %>%
-      ungroup() %>%
-      filter(STATION_NUMBER %in% clicked_station) %>%
-      left_join(stations_shapefile %>%
-                  st_drop_geometry() %>%
-                  dplyr::select(STATION_NUMBER,STATION_NAME),
-                by = 'STATION_NUMBER') %>%
+    data |>
       ggplot() +
-      geom_point(aes(y = values, x = Year, col = STATION_NAME)) +
-      geom_line(aes(y = SlopePreds, x = Year, col = STATION_NAME),
+      geom_point(aes(y = values, x = Year, col = STATION_NUMBER)) +
+      geom_line(aes(y = SlopePreds, x = Year, col = STATION_NUMBER),
                 linetype = 1,
                 linewidth = 2,
-                alpha = 0.75,
-                data = slopes) +
+                alpha = 0.75
+                ) +
+      # ggrepel::geom_label_repel(aes(y = SlopePreds,
+      #                               x = Year,
+      #                               label = paste0(STATION_NUMBER,
+      #                                              "\nSen Slope: ",
+      #                                              round(Slope, 3),
+      #                                              "\n P-value: ",
+      #                                              round(P_value,2)))) +
       labs(title = name_for_plot,
            # subtitle = paste0(unique(slopes$trend_sig),
            #                   " (Sen slope: ",round(slopes$Slope,3),
@@ -55,11 +57,11 @@ station_flow_plot = function(data,variable_choice,clicked_station,stations_shape
            caption = caption_label) +
       labs(y = paste(label.frame[label.frame$varname == variable_choice,]$labels,plot_units,sep = " ")) +
       scale_x_continuous(breaks = scales::pretty_breaks()) +
-      scale_color_brewer(palette = 'Set2') +
       theme_minimal() +
       theme(axis.title.y = element_markdown(size = 14),
             axis.title.x = element_text(size = 14),
             axis.text = element_text(size = 11),
+            plot.caption = element_text(size = 11),
             legend.position = 'none')
   }
 }
@@ -73,13 +75,13 @@ hydrograph_plot = function(dat, clicked_station, stations_shapefile){
   } else {
 
     # Establish station name (or names) for plot title.
-    if(length(clicked_station) == 1){
-      station_name = unique(stations_shapefile[stations_shapefile$STATION_NUMBER %in% clicked_station,]$STATION_NAME)
-      name_for_plot = paste0(station_name," (",unique(clicked_station),")")
-      name_for_plot
-    } else {
+    # if(length(clicked_station) == 1){
+    #   station_name = unique(stations_shapefile[stations_shapefile$STATION_NUMBER %in% clicked_station,]$STATION_NAME)
+    #   name_for_plot = paste0(station_name," (",unique(clicked_station),")")
+    #   name_for_plot
+    # } else {
       name_for_plot = paste0("Stations: ",str_flatten_comma(clicked_station))
-    }
+    # }
 
     plotting_df = dat %>%
       filter(STATION_NUMBER %in% clicked_station) %>%
@@ -109,8 +111,8 @@ hydrograph_plot = function(dat, clicked_station, stations_shapefile){
       geom_ribbon(aes(x = date_for_plot, ymin = `25%`, ymax = `75%`, fill = STATION_NUMBER), alpha = 0.1) +
       geom_line(aes(x = date_for_plot, y = median_flow, colour = STATION_NUMBER),
                 linewidth = 1) +
-      scale_color_brewer(palette = 'Set2') +
-      scale_fill_brewer(palette = 'Set2') +
+      # scale_color_brewer(palette = 'Set2') +
+      # scale_fill_brewer(palette = 'Set2') +
       # scale_colour_manual(values = c("Median Flow" = "#2d7ca1")) +
       # scale_fill_manual(values = c("Range of 90% of flow" = "#ceeaed",
       #                              '"Normal" range (50%) of flow' = 'lightblue')) +

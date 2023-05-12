@@ -1,4 +1,5 @@
 library(shiny)
+library(shinyWidgets)
 library(bslib)
 library(plotly)
 library(leaflet)
@@ -18,7 +19,7 @@ library(shinyFeedback)
 source('modules/filter_data.R')
 
 spacer_line = HTML("<hr>")
-spacer_line_no_margin = HTML("<hr style = 'margin-top:0;margin-bottom:0;'>")
+spacer_line_no_margin = HTML("<hr style = 'margin-top:0;margin-bottom:10;'>")
 
 number_stations_vb = value_box(
   "Number of Stations",
@@ -63,22 +64,38 @@ var_choice_bit = selectizeInput(
   width = '100%')
 
 region_selector_bits = tagList(
+  actionButton(inputId = 'reset_station_sel',
+               label = 'Reset Station Selection'),
   actionButton(inputId = 'reset_shape_sel',
                label = 'Reset Shape Selection'),
   actionButton(inputId = 'select_all_stats_in_shape',
                label = 'Select Stations in Shape')
 )
 
-multi_switch = shinyWidgets::switchInput(inputId = "multi_station",
-                                         label = 'Station Selection Mode',
-                                         value = FALSE,
-                                         onLabel = 'Multi',
-                                         offLabel = 'Single')
+# The following switch could be for allowing the user to
+# include all data, not just data that matches our filter criteria.
+# shinyWidgets::switchInput(
+#       inputId = 'include_low_qual_data',
+#       label = '',
+#       onLabel = 'Include',
+#       offLabel = 'Exclude'
+#     ),
 
+multistation_mode = shiny::checkboxInput(
+  inputId = 'multi_station',
+  label = 'Multiple Station Mode',
+  value = F
+)
+# multi_switch = shinyWidgets::switchInput(
+#   inputId = "multi_station",
+#   label = 'Station Selection Mode',
+#   value = FALSE,
+#   onLabel = 'Multi',
+#   offLabel = 'Single')
 
 map_shape_bit = selectizeInput(
   inputId = 'user_shape_choice',
-  label = 'Add Shapes',
+  label = 'Select Spatial Delineations',
   choices = c('None' = 'none',
               'Subwatershed Groups' = 'subw',
               'Ecoprovinces' = 'ecoprov',
@@ -90,19 +107,24 @@ map_shape_bit = selectizeInput(
   selected = 'None'
 )
 
-data_download_bit = card(
-  card_body(
-    p("Download data for selected stations, incorporating any filters that have been applied."),
-    uiOutput('download_flow_data_ui'),
-    uiOutput('download_data_with_results_ui')
-  )
+data_table_bit = tagList(
+  DT::DTOutput('selected_station_DT')
 )
+
 station_plot = tagList(
   plotlyOutput('myplot', height = 250)
 )
 
 hydrograph = tagList(
   plotlyOutput('my_hydrograph', height = 250)
+)
+
+data_download_bit = card(
+  card_body(
+    p("Download data for selected stations, incorporating any filters that have been applied."),
+    uiOutput('download_flow_data_ui'),
+    uiOutput('download_data_with_results_ui')
+  )
 )
 
 map = leafletOutput('leafmap', height = '100%')
@@ -113,8 +135,10 @@ sidebar_content = tagList(
   var_choice_bit,
   filter_data_Mod_UI('data'),
   h5("Station Selection\nTools"),
-  spacer_line,
-  multi_switch,
+  # spacer_line,
+  spacer_line_no_margin,
+  # multi_switch,
+  multistation_mode,
   map_shape_bit,
   region_selector_bits,
   # HTML("<br>"),
@@ -137,15 +161,19 @@ main_bit = tagList(
   # card(
   absolutePanel(
     id = 'trend_selector',
-    top = '70%', left = '20%', right = '0%', height = '50%',
+    top = '50%', left = '20%', right = '0%', height = '50%',
      card(
+       height = '100%',
+       card_body(
       full_screen = TRUE,
       bslib::navs_pill_card(
         id = 'tabset',
         # full_screen = TRUE,
+        nav(title = 'Tabular Data', data_table_bit),
         nav(title = 'Flow Metric Plot', station_plot),
         nav(title = 'Hydrograph', hydrograph),
         nav(title = 'Data Download', data_download_bit)
+       )
        )
     )
   )
@@ -156,10 +184,11 @@ my_theme = bs_theme(bootswatch = 'flatly',
                     # primary = '#3399ff',
                     # "sidebar-bg" = '#ADD8E7',
                     font_scale = 0.75) %>%
-  # For below, we had '#trend_selector:hover{opacity:0.95;}'
   bs_add_rules("#trend_selector {opacity:0.5;}
                 #trend_selector:hover{opacity:1;}
-                #reset_shape_sel{background-color:#2c3e50;}")
+                #reset_station_sel{background-color:#2c3e50;}
+                #reset_shape_sel{background-color:#2c3e50;}
+                #select_all_stats_in_shape{background-color:#2c3e50;}")
 
 ui = page_fillable(
 

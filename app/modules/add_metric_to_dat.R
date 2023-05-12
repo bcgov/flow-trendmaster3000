@@ -4,13 +4,13 @@ add_metric_to_dat_mod <- function(id, flow_dat_daily = flow_dat_daily,
                                   user_period_choice,
                                   scale_selector_radio,
                                   finegrain_reactives_list) {
-  moduleServer(
+  shiny::moduleServer(
     id,
     function(input, output, session) {
 
-      dat_with_metric = reactive({
+      dat_with_metric = shiny::reactive({
 
-        withProgress(message = 'calculating metric', {
+        shiny::withProgress(message = 'calculating metric', {
 
           req(!is.null(data()))
 
@@ -18,7 +18,7 @@ add_metric_to_dat_mod <- function(id, flow_dat_daily = flow_dat_daily,
           user_var_choice = user_var_choice()
 
           #Update progress bar...
-          incProgress(1 / 2)
+          shiny::incProgress(1 / 2)
 
 
 
@@ -28,7 +28,7 @@ add_metric_to_dat_mod <- function(id, flow_dat_daily = flow_dat_daily,
             # by station # and Year.
             dat = dat[, .(values = median(Value,na.rm=T)), by = .(STATION_NUMBER,Year)]
             #Update progress bar...
-            incProgress(1 / 2)
+            shiny::incProgress(1 / 2)
           }
           if(user_var_choice == 'DoY_50pct_TotalQ'){
             # Using data.table notation, calculate the day of freshet onset.
@@ -36,62 +36,63 @@ add_metric_to_dat_mod <- function(id, flow_dat_daily = flow_dat_daily,
             #  then, take the first row where the flow to date is greater than half
             #  the total annual flow, by station # and year;
             #  finally, calculate the day of the year (from 1 to 365) for that date.)
-            dat = cbind(dat,
-                        dat[,
-                            .(TotalFlow = sum(Value),
-                              FlowToDate = cumsum(Value)),
-                            by = .(STATION_NUMBER,Year)
-                        ])[
-                          FlowToDate > TotalFlow/2
-                        ][,
-                          .SD[1,],
-                          by = .(STATION_NUMBER,Year)
-                        ][
-                          ,.(STATION_NUMBER,Date,Year,DoY_50pct_TotalQ = data.table::yday(Date))
-                        ]
-            incProgress(1 / 2)
+            data_output = dat[,
+                              `:=`(
+                                TotalFlow = sum(Value),
+                                FlowToDate = cumsum(Value)),
+                              by = .(STATION_NUMBER,Year)
+            ] |>
+              dplyr::group_by(STATION_NUMBER,Year) |>
+              dplyr::group_split() |>
+              purrr::map(\(df) df[which.min(abs(df$TotalFlow/2 - df$FlowToDate)),]) |>
+              dplyr::bind_rows() |>
+              data.table::as.data.table()
+
+            dat = data_output[
+              ,.(STATION_NUMBER,Date,Year,DoY_50pct_TotalQ = data.table::yday(Date))
+            ]
+
+            shiny::incProgress(1 / 2)
           }
           if(user_var_choice %in% c('Min_7_Day','Min_7_Day_DoY')){
             # Using data.table notation,
             # 1. Calculate row numbers by station # and Year.
             # 2. Calculate 7-day rolling average of flow.
             # 3. Just take lowest 7-day flow (to find the low-flow)
-            dat = dat[,
-                      RowNumber := rleid(Value),
-                      by = .(STATION_NUMBER,Year)
-            ][ , Min_7_Day := data.table::frollmean(Value, 7, align = 'right', fill = NA),
-               by = .(STATION_NUMBER,Year)
-            ][
-              ,
-              .SD[which.min(Min_7_Day),],
-              by = .(STATION_NUMBER,Year)
-            ][,
-              Min_7_Day_DoY := data.table::yday(Date),
-              by = .(STATION_NUMBER,Year)
+            interm_data = dat[,Min_7_Day := data.table::frollmean(Value, 7, align = 'right', fill = NA),
+                                        by = .(STATION_NUMBER,Year)
+            ] |>
+              dplyr::group_by(STATION_NUMBER,Year) |>
+              dplyr::group_split() |>
+              purrr::map(\(df) df[which.min(df$Min_7_Day),]) |>
+              dplyr::bind_rows() |>
+              data.table::as.data.table()
+
+            dat = interm_data[,
+                              .(STATION_NUMBER,Date,Year, Min_7_Day, Min_7_Day_DoY = data.table::yday(Date))
             ]
             # names(dat)[c(3)] <- c("Min_7_Day_Date")
-            incProgress(1 / 2)
+            shiny::incProgress(1 / 2)
           }
           if(user_var_choice %in% c('Min_30_Day','Min_30_Day_DoY')){
             # Using data.table notation,
             # 1. Calculate row numbers by station # and Year.
             # 2. Calculate 7-day rolling average of flow.
             # 3. Just take lowest 7-day flow (to find the low-flow)
-            dat = dat[,
-                      RowNumber := rleid(Value),
-                      by = .(STATION_NUMBER,Year)
-            ][ , Min_30_Day := data.table::frollmean(Value, 30, align = 'right', fill = NA),
-               by = .(STATION_NUMBER,Year)
-            ][
-              ,
-              .SD[which.min(Min_30_Day),],
-              by = .(STATION_NUMBER,Year)
-            ][,
-              Min_30_Day_DoY := data.table::yday(Date),
-              by = .(STATION_NUMBER,Year)
+            interm_data = dat[,Min_30_Day := data.table::frollmean(Value, 30, align = 'right', fill = NA),
+                                        by = .(STATION_NUMBER,Year)
+            ] |>
+              dplyr::group_by(STATION_NUMBER,Year) |>
+              dplyr::group_split() |>
+              purrr::map(\(df) df[which.min(df$Min_30_Day),]) |>
+              dplyr::bind_rows() |>
+              data.table::as.data.table()
+
+            dat = interm_data[,
+                              .(STATION_NUMBER,Date,Year, Min_30_Day, Min_30_Day_DoY = data.table::yday(Date))
             ]
             # names(dat)[c(3)] <- c("Min_30_Day_Date")
-            incProgress(1 / 2)
+            shiny::incProgress(1 / 2)
           }
           if(user_var_choice %in% c('Max_7_Day','Max_7_Day_DoY')){
             # Using data.table notation,
@@ -99,32 +100,30 @@ add_metric_to_dat_mod <- function(id, flow_dat_daily = flow_dat_daily,
             # 2. Calculate 7-day rolling average of flow.
             # 3. Just take lowest 7-day flow (to find the low-flow)
 
-            dat = dat[,
-                      RowNumber := rleid(Value),
-                      by = .(STATION_NUMBER,Year)
-            ][ , Max_7_Day := data.table::frollmean(Value, 7, align = 'right', fill = NA),
-               by = .(STATION_NUMBER,Year)
-            ][
-              ,
-              .SD[which.max(Max_7_Day),],
-              by = .(STATION_NUMBER,Year)
-            ][,
-              Max_7_Day_DoY := data.table::yday(Date),
-              by = .(STATION_NUMBER,Year)
+            interm_data = dat[,Max_7_Day := data.table::frollmean(Value, 7, align = 'right', fill = NA),
+                                        by = .(STATION_NUMBER,Year)
+            ] |>
+              dplyr::group_by(STATION_NUMBER,Year) |>
+              dplyr::group_split() |>
+              purrr::map(\(df) df[which.max(df$Max_7_Day),]) |>
+              dplyr::bind_rows() |>
+              data.table::as.data.table()
+
+            dat = interm_data[,
+                              .(STATION_NUMBER,Date,Year, Max_7_Day, Max_7_Day_DoY = data.table::yday(Date))
             ]
             # names(dat)[c(3)] <- c("Max_7_Day_Date")
-            incProgress(1 / 2)
+            shiny::incProgress(1 / 2)
           }
-
           names(dat)[which(names(dat) == user_var_choice)] <- 'values'
           dat = dat[,.(STATION_NUMBER, Year,Date,values)]
           return(dat)
         })
-      }) %>%
-        bindCache(user_var_choice(),
-                  user_period_choice(),
-                  scale_selector_radio(),
-                  finegrain_reactives_list())
+      }) #%>%
+        # bindCache(user_var_choice(),
+        #           user_period_choice(),
+        #           scale_selector_radio(),
+        #           finegrain_reactives_list())
       return(dat_with_metric)
     }
   )

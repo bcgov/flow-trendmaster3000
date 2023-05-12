@@ -28,9 +28,9 @@ filter_data_DT = function(data, finegrain_selector = c(3,15,6,15),
 
     return(dat_filtered)
 }
-
-bench::bench_memory(filter_data_DT(data))
-bench::workout(filter_data_DT(data))
+#
+# bench::bench_memory(filter_data_DT(data))
+# bench::workout(filter_data_DT(data))
 
 filtered_data = filter_data_DT(data)
 
@@ -131,18 +131,20 @@ add_metric = function(dat, user_var_choice){
   return(dat)
 }
 
+# bench::bench_memory(add_metric(filtered_data,'Average'))
+# bench::bench_memory(add_metric(filtered_data,'DoY_50pct_TotalQ'))
+# bench::bench_memory(add_metric(filtered_data,'Min_7_Day'))
+
 dat_with_m = add_metric(filtered_data, 'DoY_50pct_TotalQ')
 
-calc_mk_fcase(dat_with_m, 'DoY_50pct_TotalQ')
+# profvis::profvis({
+#   filtered_data = filter_data_DT(data = data)
+#   add_metric(dat = filtered_data, user_var_choice = 'Average')
+#   })
 
-profvis::profvis({
-  filtered_data = filter_data_DT(data = data)
-  add_metric(dat = filtered_data, user_var_choice = 'Average')
-  })
-
-bench::bench_memory({
-  add_metric(dat = filtered_data, user_var_choice = 'Max_7_Day')
-})
+# bench::bench_memory({
+#   add_metric(dat = filtered_data, user_var_choice = 'Max_7_Day')
+# })
 
 
 calc_mk = function(data, user_var_choice){
@@ -222,24 +224,59 @@ calc_mk_fcase = function(data, user_var_choice){
     ))
 }
 
+dat_with_mk = calc_mk_fcase(dat_with_m, 'DoY_50pct_TotalQ')
+
+stations = read_sf('app/www/stations.gpkg')
+
+stations_with_dat = stations |>
+  left_join(dat_with_mk)
+
+og_calc = function(stations_with_dat, shapes, shape_type){
+  means_for_shapes = as.data.table(stations_with_dat)[,
+                                             trend_as_number := fcase(trend_sig == 'Significant Trend Down', -2,
+                                                                      trend_sig == 'Non-Significant Trend Down', -1,
+                                                                      trend_sig == "No Trend", 0,
+                                                                      trend_sig == 'Non-Significant Trend Up', 1,
+                                                                      trend_sig == 'Significant Trend Up', 2)
+  ][,
+    .(average_trend_result = mean(trend_as_number),
+      stations_for_mean = .N),
+    by = get(shape_type)][, .(shape_name = get,
+                         average_trend_result,
+                         stations_for_mean)]
+
+  merge(shapes, means_for_shapes)
+
+}
+
+og_calc(stations_with_dat = stations_with_dat, shapes = read_sf('app/www/ecosections.gpkg'), shape_type = 'ecosec')
+
+
+new_calc = function(){
+  interm_data = filtered_data[,Min_7_Day := data.table::frollmean(Value, 7, align = 'right', fill = NA),
+     by = .(STATION_NUMBER,Year)
+  ] |>
+    group_by(STATION_NUMBER,Year) |>
+    group_split() |>
+    map(\(df) df[which.min(df$Min_7_Day),]) |>
+    bind_rows() |>
+    as.data.table()
+
+  interm_data[,
+    .(STATION_NUMBER,Date,Year,values = Min_7_Day, Min_7_Day_DoY = data.table::yday(Date))
+  ]
+}
 
 bench::bench_memory({
-  calc_mk(data = dat_with_m, user_var_choice = 'Max_7_Day')
+  og_calc(stations_with_dat = stations_with_dat, shapes = read_sf('app/www/ecosections.gpkg'), shape_type = 'ecosec')
 })
-
-bench::bench_memory(calc_mk_fcase(data = dat_with_m, user_var_choice = 'Max_7_Day'))
-
-bench::bench_memory({
-  data = qs::qread('app/www/daily_flow_records_passes_qaqc.qs')
-  data.table::setDT(data)
-  filtered_data = filter_data_DT(data = data)
-  add_metric(dat = filtered_data, user_var_choice = 'Min_30_Day')
-})
-
-# bench::system_time(case_when_example(dataset = data))
-# bench::system_time(case_when_split_example(dataset = data))
 
 bench::workout({
-  dat_filt_grouped()
-  dat_filt_ungrouped()
+  og_calc(stations_with_dat = stations_with_dat,
+          shapes = read_sf('app/www/ecosections.gpkg'),
+          shape_type = 'ecosec')
+  })
+
+bench::bench_memory({
+  new_calc()
 })
