@@ -49,27 +49,27 @@ make_base_bc_leafmap = function(){
 
 
 update_leaflet = function(map, stations, clicked_station, shape_type, shapes, clicked_shape, pal){
-
   if(sum(grepl('Nothing', shapes$shape_name)) >= 1){
 
  } else {
 
-   # If it's a drawn poly, add 'drawn_poly' to stations df.
-   # This helps with spatial matching, which we only have to do in the shiny app
-   # for a drawn polygon (all other shapes included have been matched prior to the
-   # shiny app code)
-   if(sum(grepl('drawn_poly',shapes$shape_name)) >= 1){
-     stations = stations |>
-       dplyr::mutate(drawn_shape = 'drawn_poly')
 
-     shapes = shapes |> dplyr::select(-average_trend_result,
-                                      -stations_for_mean)
-
-     # Just keep stations inside our shape.
-     stations = stations |>
-       sf::st_join(shapes) |>
-       dplyr::filter(!is.na(shape_name))
-   }
+   # # If it's a drawn poly, add 'drawn_poly' to stations df.
+   # # This helps with spatial matching, which we only have to do in the shiny app
+   # # for a drawn polygon (all other shapes included have been matched prior to the
+   # # shiny app code)
+   # if(sum(grepl('drawn_poly',shapes$shape_name)) >= 1){
+   #   stations = stations |>
+   #     dplyr::mutate(drawn_shape = 'drawn_poly')
+   #
+   #   shapes = shapes |> dplyr::select(-average_trend_result,
+   #                                    -stations_for_mean)
+   #
+   #   # Just keep stations inside our shape.
+   #   stations = stations |>
+   #     sf::st_join(shapes) |>
+   #     dplyr::filter(!is.na(shape_name))
+   # }
 
   # Note the janky data.table code I wrote below: to pass in a reactive variable
   # as one of the grouping variables in the 'by = ' argument, I had to use
@@ -78,6 +78,11 @@ update_leaflet = function(map, stations, clicked_station, shape_type, shapes, cl
 
    shape_name_for_dt = shape_type()
 
+  # If the user has used a drawn polygon, we have to refer to
+  # a column with a specific name... otherwise, use
+  # the variable passed in, called 'shape_name_for_dt'
+  # (this could be cleaned up!)
+  if(shape_name_for_dt != 'drawn_shape'){
    means_for_shapes = data.table::as.data.table(stations)[,
                                               trend_as_number := data.table::fcase(trend_sig %in% c('Significant Trend Down','Significant Trend Earlier'), -2,
                                                                        trend_sig %in% c('Non-Significant Trend Down','Non-Significant Trend Earlier'), -1,
@@ -92,6 +97,25 @@ update_leaflet = function(map, stations, clicked_station, shape_type, shapes, cl
                                stations_for_mean)]
 
    shapes = dplyr::left_join(shapes, means_for_shapes)
+
+  } else {
+   means_for_shapes = data.table::as.data.table(stations)[,
+                                                          trend_as_number := data.table::fcase(trend_sig %in% c('Significant Trend Down','Significant Trend Earlier'), -2,
+                                                                                               trend_sig %in% c('Non-Significant Trend Down','Non-Significant Trend Earlier'), -1,
+                                                                                               trend_sig %in% c("No Trend"), 0,
+                                                                                               trend_sig %in% c('Non-Significant Trend Up','Non-Significant Trend Later'), 1,
+                                                                                               trend_sig %in% c('Significant Trend Up','Significant Trend Later'), 2)
+   ][,
+     .(average_trend_result = mean(trend_as_number),
+       stations_for_mean = .N),
+     by = shape_name][, .(shape_name,
+                          average_trend_result,
+                          stations_for_mean)]
+
+   shapes = dplyr::left_join(shapes |> dplyr::select(shape_name), means_for_shapes)
+
+  }
+
  }
 
   shape_pal = leaflet::colorNumeric(palette = 'RdBu',

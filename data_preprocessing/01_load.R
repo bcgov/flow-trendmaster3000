@@ -28,10 +28,110 @@ library(lubridate)
 library(tidyhydat)
 library(fasstr)
 library(stringr)
+library(EnvStats)
+library(data.table)
+library(sf)
+
+calculate_metrics = function(dat){
+# browser()
+  if(is.data.frame(dat)) dat = data.table::as.data.table(dat)
+    dat_mean = dat[, .(Median = median(Value,na.rm=T)), by = .(STATION_NUMBER,Year)]
+
+    # Using data.table notation, calculate the day of freshet onset.
+    # (first, calculate the total flow, the flow-to-date, and the row #,
+    #  then, take the first row where the flow to date is greater than half
+    #  the total annual flow, by station # and year;
+    #  finally, calculate the day of the year (from 1 to 365) for that date.)
+    freshet_dat = dat
+
+    interim_data = freshet_dat[,
+                      `:=`(
+                        TotalFlow = sum(Value),
+                        FlowToDate = cumsum(Value)),
+                      by = .(STATION_NUMBER,Year)
+    ] |>
+      dplyr::group_by(STATION_NUMBER,Year) |>
+      dplyr::group_split() |>
+      purrr::map(\(df) df[which.min(abs(df$TotalFlow/2 - df$FlowToDate)),]) |>
+      dplyr::bind_rows() |>
+      data.table::as.data.table()
+
+    freshet_dat = interim_data[
+      ,.(STATION_NUMBER,Year,DoY_50pct_TotalQ = data.table::yday(Date))
+    ]
+
+    # Using data.table notation,
+    # 1. Calculate row numbers by station # and Year.
+    # 2. Calculate 7-day rolling average of flow.
+    # 3. Just take lowest 7-day flow (to find the low-flow)
+    min_7_dat = dat
+
+    interim_data = min_7_dat[,Min_7_Day := data.table::frollmean(Value, 7, align = 'right', fill = NA),
+                      by = .(STATION_NUMBER,Year)
+    ] |>
+      dplyr::group_by(STATION_NUMBER,Year) |>
+      dplyr::group_split() |>
+      purrr::map(\(df) df[which.min(df$Min_7_Day),]) |>
+      dplyr::bind_rows() |>
+      dplyr::rename(Min_7_Date = Date) |>
+      data.table::as.data.table()
+
+    min_7_dat = interim_data[,
+                      .(STATION_NUMBER,Min_7_Date,Year, Min_7_Day, Min_7_Day_DoY = data.table::yday(Min_7_Date))
+    ]
+
+    # Using data.table notation,
+    # 1. Calculate row numbers by station # and Year.
+    # 2. Calculate 7-day rolling average of flow.
+    # 3. Just take lowest 7-day flow (to find the low-flow)
+    min_30_dat = dat
+
+    interim_data = min_30_dat[,Min_30_Day := data.table::frollmean(Value, 30, align = 'right', fill = NA),
+                      by = .(STATION_NUMBER,Year)
+    ] |>
+      dplyr::group_by(STATION_NUMBER,Year) |>
+      dplyr::group_split() |>
+      purrr::map(\(df) df[which.min(df$Min_30_Day),]) |>
+      dplyr::bind_rows() |>
+      dplyr::rename(Min_30_Date = Date) |>
+      data.table::as.data.table()
+
+    min_30_dat = interim_data[,
+                      .(STATION_NUMBER,Min_30_Date,Year, Min_30_Day, Min_30_Day_DoY = data.table::yday(Min_30_Date))
+    ]
+
+    # Using data.table notation,
+    # 1. Calculate row numbers by station # and Year.
+    # 2. Calculate 7-day rolling average of flow.
+    # 3. Just take lowest 7-day flow (to find the low-flow)
+    max_7_dat = dat
+
+    interim_data = max_7_dat[,Max_7_Day := data.table::frollmean(Value, 7, align = 'right', fill = NA),
+                      by = .(STATION_NUMBER,Year)
+    ] |>
+      dplyr::group_by(STATION_NUMBER,Year) |>
+      dplyr::group_split() |>
+      purrr::map(\(df) df[which.max(df$Max_7_Day),]) |>
+      dplyr::bind_rows() |>
+      dplyr::rename(Max_7_Date = Date) |>
+      data.table::as.data.table()
+
+    max_7_dat = interim_data[,
+                      .(STATION_NUMBER,Max_7_Date,Year, Max_7_Day, Max_7_Day_DoY = data.table::yday(Max_7_Date))
+    ]
+
+    # Surely there's a better way to join these guys...
+    return(
+      left_join(dat_mean,
+                left_join(freshet_dat,
+                          left_join(min_7_dat,
+                                    left_join(min_30_dat,max_7_dat))))
+      )
+}
+
+tidyhydat::download_hydat(ask = F)
 
 ##### First pass to filter for stations with complete data
-
-#tidyhydat::download_hydat()
 
 ## Filter stations for last n years of data, minimum number of years
 year_filt <- year(Sys.Date())-5
@@ -44,12 +144,8 @@ stations_all_bc_list <- unique(hy_annual_stats(prov_terr_state_loc = "BC") %>%
 
 ## Get HYDAT data for all flow stations
 if(!dir.exists('data')) dir.create('data')
-if(!file.exists('data/hydat_daily_all.rds')){
-  hydat_daily_all <- hy_daily_flows(station_number = stations_all_bc_list)
-  saveRDS(hydat_daily_all, file = 'data/hydat_daily_all.rds')
-}
 
-hydat_daily_all <- read_rds(file = "data/hydat_daily_all.rds")
+hydat_daily_all <- hy_daily_flows(station_number = stations_all_bc_list)
 
 ## Filter stations for n complete years
 stations_filt <- hydat_daily_all %>%
@@ -355,15 +451,39 @@ stations_filt3 <- stations_filt2 %>%
 # min_years_allowed <- 25
 min_years_allowed <- 10
 
-stns_ann_data <- hydat_daily_all %>%
+# Calculate annual summaries for:
+# i. All data
+stns_ann_data_all = hydat_daily_all |>
+  mutate(Year = year(Date)) %>%
+  group_by(STATION_NUMBER, Year) %>%
+  calculate_metrics()
+
+# ii. Just data from 1990+
+stns_ann_data_1990 <- hydat_daily_all %>%
+  mutate(Year = year(Date)) %>%
+  filter(Year >= 1990) |>
+  group_by(STATION_NUMBER, Year) %>%
+  calculate_metrics()
+
+# iii. Just data from 2010+
+stns_ann_data_2010 <- hydat_daily_all %>%
+  mutate(Year = year(Date)) %>%
+  filter(Year >= 2010) |>
+  group_by(STATION_NUMBER, Year) %>%
+  calculate_metrics()
+
+stns_ann_data_qaqc_stations <- hydat_daily_all %>%
   filter(STATION_NUMBER %in% unique(stations_filt3$STATION_NUMBER)) %>%
   mutate(Year = year(Date)) %>%
   group_by(STATION_NUMBER, Year) %>%
-  summarise(Ann_Mean = mean(Value, na.rm = FALSE)) %>%
-  group_by(STATION_NUMBER) %>%
-  filter(sum(!is.na(Ann_Mean)) >= min_years_allowed)
-stns_ann <- unique(stns_ann_data$STATION_NUMBER)
-ggplot(stns_ann_data, aes(Year,STATION_NUMBER, colour = Ann_Mean))+
+  calculate_metrics() |>
+  filter(sum(!is.na(Median)) >= min_years_allowed) |>
+  ungroup()
+
+all_stations_annual <- unique(stns_ann_data_all$STATION_NUMBER)
+stations_annual_qaqc_stations = unique(stns_ann_data_qaqc_stations$STATION_NUMBER)
+
+ggplot(stns_ann_data_qaqc_stations, aes(Year,STATION_NUMBER, colour = Median))+
   geom_point()
 plotly::ggplotly()
 
@@ -379,8 +499,6 @@ remove_custom <- tribble(
   "08MH156", "gap in 90s + 00s",
   "08HE006", "too short"
 )
-
-
 
 
 # DO THIS, THEN MAX OF THIS IS ANNUAL NA filt, NOT FINAL, JUST REMOVING OLD GAPPY DATA
@@ -472,55 +590,94 @@ stations_filt4 <- stations_filt3 %>%
 
 
 # For each station, filter out big data gaps.
-stns_ann_data2 <- stations_filt4$STATION_NUMBER %>%
+stns_ann_data_qaqc_stations <- stations_filt4$STATION_NUMBER %>%
     map( ~ {
-      stns_ann_data %>%
+      stns_ann_data_qaqc_stations %>%
         filter(STATION_NUMBER == .x) %>%
-        filter(Year >= stations_filt4[stations_filt4$STATION_NUMBER == .x,]$Year_from)
+        filter(Year >= stations_filt4[stations_filt4$STATION_NUMBER == .x,]$Year_from) |>
+        ungroup()
     }) %>%
   bind_rows()
 
-stns_ann_data %>%
+stns_ann_data_qaqc_stations %>%
   count(STATION_NUMBER, sort = T)
 
-stns_ann_data2 %>%
-  filter(sum(!is.na(Ann_Mean)) >= min_years_allowed) %>%
-  count(STATION_NUMBER, sort = T)
+# mapfilt4 <- sf::st_as_sf(stations_filt4 %>% select(STATION_NUMBER, LONGITUDE, LATITUDE), coords = c("LONGITUDE", "LATITUDE"),crs = 4326)
+# mapview::mapview(mapfilt4)
 
-ggplot(stns_ann_data2, aes(Year,STATION_NUMBER, colour = Ann_Mean))+
-  geom_point()+
-  geom_vline(xintercept = max(stns_ann_data2$Year)-25-0.5, colour = "red")+
-  geom_vline(xintercept = max(stns_ann_data2$Year)-50-0.5, colour = "red")+
-  geom_vline(xintercept = max(stns_ann_data2$Year)-75-0.5, colour = "red")
-plotly::ggplotly()
-
-mapfilt4 <- sf::st_as_sf(stations_filt4 %>% select(STATION_NUMBER, LONGITUDE, LATITUDE), coords = c("LONGITUDE", "LATITUDE"),crs = 4326)
-mapview::mapview(mapfilt4)
-
-final_stations_table <- stns_ann_data2
+final_stations_table <- stns_ann_data_qaqc_stations
 
 final_stations_summary <- final_stations_table %>%
-  filter(!is.na(Ann_Mean)) %>%
+  filter(!is.na(Median)) %>%
   group_by(STATION_NUMBER) %>%
   summarise(N_Years = n(),
             Min_Year = min(Year),
             Max_Year = max(Year),
             Total_Years = Max_Year - Min_Year +1)
 
-# rm(list=setdiff(ls(), "final_stations_table"))
-write.csv(final_stations_summary, "data/included_stations_and_years.csv", row.names = F)
+list_of_qaqc_stations = unique(final_stations_summary$STATION_NUMBER)
 
-# Also, download all stations in BC, adding a column indicating if they
-# are included in our filtered subset or not!
+write.csv(final_stations_summary, "data/included_stations_and_years.csv", row.names = F)
+write.csv(list_of_qaqc_stations, 'app/www/qaqc_stations.csv', row.names = F)
+
+# Save the annually summarized datasets.
+qs::qsave(stns_ann_data_all, 'app/www/ann_flow_summary.qs')
+qs::qsave(stns_ann_data_1990, 'app/www/ann_flow_summary_1990.qs')
+qs::qsave(stns_ann_data_2010, 'app/www/ann_flow_summary_2010.qs')
+
+# Save dataset of ALL flow. We will use this in the app with
+# spatial subsets of the province, filtering by station name.
 all_bc_hydat_data = hydat_daily_all %>%
   filter(!is.na(Value),
          Parameter == 'Flow') %>%
   dplyr::select(-Symbol, -Parameter) %>%
-  left_join(final_stations_summary %>%
-              dplyr::select(STATION_NUMBER) %>%
-              mutate(meets_dat_qual_check = T)) %>%
-  mutate(meets_dat_qual_check = replace_na(meets_dat_qual_check, FALSE)) %>%
   mutate(Month = lubridate::month(Date),
          Year = lubridate::year(Date))
 
 qsave(all_bc_hydat_data, 'app/www/daily_flow_records.qs')
+
+# Also curious if I could try one value per week for the records...
+all_bc_hydat_data_week_av = all_bc_hydat_data |>
+  mutate(day_of_year = lubridate::yday(Date)) |>
+  mutate(Week = 1 + (day_of_year %/% 7)) |>
+  group_by(STATION_NUMBER, Week, Year) |>
+  mutate(week_value = mean(Value, na.rm=T)) |>
+  slice(1) |>
+  dplyr::select(-Week,Value = week_value, -week_value,-day_of_year) |>
+  ungroup()
+
+qs::qsave(all_bc_hydat_data_week_av, 'app/www/weekly_flow_records.qs')
+
+# If no /www folder (used for the shiny app, and also for static results PDF)
+if(!dir.exists('app/www')) dir.create('app/www')
+
+# Get all stations, add column indicating if station
+# meets filtering criteria.
+all_stations = tidyhydat::hy_stations(prov_terr_state_loc = 'BC') |>
+  filter(STATION_NUMBER %in% unique(all_bc_hydat_data$STATION_NUMBER)) |>
+  mutate(meets_dat_qual_check = STATION_NUMBER %in% list_of_qaqc_stations) |>
+  mutate(STATION_NAME = stringr::str_to_title(STATION_NAME),
+         HYD_STATUS = stringr::str_to_title(HYD_STATUS)) %>%
+  st_as_sf(coords = c("LONGITUDE","LATITUDE"), crs = 4326) %>%
+  dplyr::select(STATION_NUMBER,STATION_NAME,HYD_STATUS,meets_dat_qual_check)
+
+
+# Add in which of each spatial delineation of BC each station is in.
+# Doing this here saves us some processing power in the shiny app.
+
+ecoprov = read_sf('app/www/ecoprovinces.gpkg')
+ecoreg = read_sf('app/www/ecoregions.gpkg')
+ecosec = read_sf('app/www/ecosections.gpkg')
+nr_dist = read_sf('app/www/nr_districts.gpkg')
+nr_reg = read_sf('app/www/nr_regions.gpkg')
+subw = read_sf('app/www/subw.gpkg')
+
+all_stations = all_stations %>%
+  st_join(ecoprov %>% select(ecoprov = shape_name), st_intersects) %>%
+  st_join(ecoreg %>% select(ecoreg = shape_name), st_intersects) %>%
+  st_join(ecosec %>% select(ecosec = shape_name), st_intersects) %>%
+  st_join(nr_dist %>% select(nr_dist = shape_name), st_intersects) %>%
+  st_join(nr_reg %>% select(nr_reg = shape_name), st_intersects) %>%
+  st_join(subw %>% select(subw = shape_name), st_intersects)
+
+write_sf(all_stations, 'app/www/stations.gpkg')
