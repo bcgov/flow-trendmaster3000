@@ -1,12 +1,12 @@
 station_flow_plot = function(data,variable_choice,clicked_station,stations_shapefile,slopes,
                              caption_label){
 
-  label.frame = data.frame(varname = c('Average',
+  label.frame = data.frame(varname = c('Median',
                                        'DoY_50pct_TotalQ','Min_7_Day',
                                        'Min_7_Day_DoY','Min_30_Day',
                                        'Min_30_Day_DoY','Max_7_Day',
                                        'Max_7_Day_DoY'),
-                           labels = c('Average Flow',
+                           labels = c('Average (Median) Flow',
                                       'Date of \n50% Annual Flow',
                                       'Minimum Flow (7day)',
                                       'Date of \nMinimum Flow (7day)',
@@ -22,7 +22,7 @@ station_flow_plot = function(data,variable_choice,clicked_station,stations_shape
   } else {
 
     plot_units = fcase(
-      variable_choice %in% c('Average','Total_Volume_m3','Min_7_Day','Min_30_Day','Max_7_Day') , '\n(m<sup>3</sup>/second)',
+      variable_choice %in% c('Median','Total_Volume_m3','Min_7_Day','Min_30_Day','Max_7_Day') , '\n(m<sup>3</sup>/second)',
       variable_choice %in% c('DoY_50pct_TotalQ','Min_7_Day_DoY','Min_30_Day_DoY','Max_7_Day_DoY'), " "
     )
 
@@ -42,7 +42,7 @@ station_flow_plot = function(data,variable_choice,clicked_station,stations_shape
                 linetype = 1,
                 linewidth = 2,
                 alpha = 0.75
-                ) +
+      ) +
       # ggrepel::geom_label_repel(aes(y = SlopePreds,
       #                               x = Year,
       #                               label = paste0(STATION_NUMBER,
@@ -80,17 +80,18 @@ hydrograph_plot = function(dat, clicked_station, stations_shapefile){
     #   name_for_plot = paste0(station_name," (",unique(clicked_station),")")
     #   name_for_plot
     # } else {
-      name_for_plot = paste0("Stations: ",str_flatten_comma(clicked_station))
+    name_for_plot = paste0("Stations: ",str_flatten_comma(clicked_station))
     # }
 
     plotting_df = dat %>%
       filter(STATION_NUMBER %in% clicked_station) %>%
-      mutate(date_for_plot = lubridate::ymd(paste0('2023-',month(Date),'-',day(Date)))) %>%
-      group_by(STATION_NUMBER, date_for_plot) %>%
+      # mutate(date_for_plot = lubridate::ymd(paste0('2023-',month(Date),'-',day(Date)))) %>%
+      # group_by(STATION_NUMBER, date_for_plot) %>%
+      group_by(STATION_NUMBER, Month) %>%
       reframe(median_flow = median(Value, na.rm=T),
               percentiles = list(quantile(Value, probs = c(0.05,0.25,0.75,0.95)))) %>%
       unnest_wider(percentiles) %>%
-      filter(!is.na(date_for_plot)) %>%
+      # filter(!is.na(date_for_plot)) %>%
       # # Convert from calendar year to 'water year'
       # slice(
       #   # Slice for October to December
@@ -101,9 +102,10 @@ hydrograph_plot = function(dat, clicked_station, stations_shapefile){
       # mutate(month_label = ifelse(day(date_for_plot) == 15, month(date_for_plot), NA)) %>%
       # # mutate(back_to_doy = 1:365) %>%
       # mutate(back_to_doy = 1:nrow(.)) %>%
-      mutate(median_line_label = 'Median Flow') %>%
+    mutate(median_line_label = 'Median Flow') %>%
       mutate(fifty_pct_label = '"Normal" range (50%) of flow') %>%
-      mutate(ninety_pct_label = 'Range of 90% of flow')
+      mutate(ninety_pct_label = 'Range of 90% of flow') |>
+      mutate(date_for_plot = lubridate::ymd(paste0('2023-',Month,'-01')))
 
     plotting_df %>%
       ggplot() +

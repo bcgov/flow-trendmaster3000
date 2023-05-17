@@ -11,6 +11,7 @@
 # See the License for the specific language governing permissions and limitations under the License.
 
 source('UI.R')
+# source('UI_base_shiny.R')
 source('utils/stats_funcs.R')
 source('utils/plot_funcs.R')
 source('utils/leafmap_funcs.R')
@@ -30,12 +31,12 @@ server <- function(input, output) {
     setwd(paste0(getwd(),"/www"))
   }
 
-  ## Raw flow data.
-  # flow_dat_daily = qs::qread("daily_flow_records_passes_qaqc.qs")
-  flow_dat_daily = qs::qread("small_dat.qs")
-
-  # set data as a data.table object.
-  setDT(flow_dat_daily)
+  # ## Raw flow data.
+  all_flow_records_for_hydrograph = qs::qread("weekly_flow_records.qs")
+  # flow_dat_daily = qs::qread("small_dat.qs")
+  #
+  # # set data as a data.table object.
+  # setDT(flow_dat_daily)
 
   ## BC spatial file.
   bc_boundary = read_sf('bc_bound.gpkg') %>%
@@ -47,15 +48,23 @@ server <- function(input, output) {
 
   # Set up reactives -------------------------------------------------
 
+  # Set up reactive values that store the clicked station and map shape
+  click_station <- reactiveVal('no_selection')
+  click_shape <- reactiveVal('no_selection')
+
   # Get user variable choice, make sure it's reactive.
   user_var = reactive(input$user_var_choice)
 
-  # EXPERIMENTAL - ALWAYS have at least one data filter on... #
-  # Which stations to include?
+  # Stations subsetted by a selected shape on the map.
   stations_to_include = reactive({
-    stations = stations_sf[stations_sf$meets_criteria == T,]
+    stations = stations_sf
     if(!click_shape() %in% c('no_selection','drawn_poly')){
-      stations = stations |> filter(!!sym(input$user_shape_choice) %in% click_shape())
+      stations = stations |> filter(!!sym(input$user_shape_choice) == click_shape())
+    }
+    if(click_shape() %in% c('drawn_poly') | shape_for_map()$shape_name[1] == 'drawn_poly'){
+      stations = stations |>
+        st_join(drawn_poly(), st_intersects) |>
+        filter(!is.na(shape_name))
     }
     return(stations)
   })
@@ -72,8 +81,9 @@ server <- function(input, output) {
   # the scale selector (e.g. annual, or monthly, etc.),
   # and the finegrained reactive filter.
   filtering_mod_output <- filter_data_Mod_Server("data",
-                                                 flow_dat = flow_dat_daily,
-                                                 stations = stations_to_include())
+                                                 reactive(input$include_low_qual_data),
+                                                 stations_to_include,
+                                                 number_station_cutoff = 50)
 
   # Use the metric-adding module on the filtered data.
   # Whichever metric the user has chosen will be calculated
@@ -116,10 +126,6 @@ server <- function(input, output) {
     click_shape('drawn_poly')
     print(paste0('click_shape is:', click_shape()))
   })
-
-  # Set up reactive values that store the clicked station and map shape
-  click_station <- reactiveVal('no_selection')
-  click_shape <- reactiveVal('no_selection')
 
   # Specify which variables are 'Date' variables (for plot labelling)
   date_vars = c("Min_7_Day_DoY","Min_30_Day_DoY",
@@ -187,27 +193,32 @@ server <- function(input, output) {
   # If the user clicks on a shape on the map,
   # just keep the stations within that shape.
   stations_sf_with_trend_in_shape = reactive({
-    #If the user has selected a shape on the leaflet map, filter stations.
-    if(click_shape() != 'no_selection'){
-
-      # If it is a custom drawn polygon, we must do a spatial match here.
-      if(click_shape() == 'drawn_poly'){
-
-        return(stations_sf_with_trend() %>%
-          st_join(shape_for_map() %>% filter(shape_name == click_shape()), st_intersects) %>%
-          filter(!is.na(shape_name)) %>%
-          dplyr::select(-shape_name)
-        )
-
-      } else {
-      return(
-        stations_sf_with_trend() %>%
-          filter(!!sym(input$user_shape_choice) == click_shape())
-      )
-      }
-    } else {
-      return(stations_sf_with_trend())
-    }
+    stations_sf_with_trend()
+    # #If the user has selected a shape on the leaflet map, filter stations.
+    # if(click_shape() != 'no_selection' | shape_for_map()$shape_name == 'drawn_poly'){
+    #
+    #   # If it is a custom drawn polygon, we must do a spatial match here.
+    #   if(click_shape() == 'drawn_poly' | shape_for_map()$shape_name == 'drawn_poly'){
+    #     # Wait for the reactive 'shape_for_map' to get updated to our drawn polygon.
+    #     req(shape_for_map()$shape_name == 'drawn_poly')
+    #
+    #     return(stations_sf_with_trend() %>%
+    #              dplyr::select(-shape_name) |>
+    #       st_join(shape_for_map() |>
+    #                 dplyr::select(), st_intersects) %>%
+    #       filter(!is.na(shape_name)) %>%
+    #       dplyr::select(-shape_name)
+    #     )
+    #
+    #   } else {
+    #   return(
+    #     stations_sf_with_trend() %>%
+    #       filter(!!sym(input$user_shape_choice) == click_shape())
+    #   )
+    #   }
+    # } else {
+    #   return(stations_sf_with_trend())
+    # }
 
   })
 
@@ -220,7 +231,7 @@ server <- function(input, output) {
     DT::datatable(stations_sf_with_trend() |>
                     st_drop_geometry() |>
                     dplyr::select(STATION_NUMBER,STATION_NAME,
-                                  Status = HYD_STATUS, meets_criteria,
+                                  Status = HYD_STATUS, #meets_criteria,
                                   Trend = trend_sig),
                   extensions = 'Buttons',
                   options = list(
@@ -356,7 +367,7 @@ server <- function(input, output) {
 
   output$my_hydrograph = renderPlotly({
     h = hydrograph_plot(
-      dat = filtering_mod_output$dat_filtered(),
+      dat = all_flow_records_for_hydrograph |> filter(STATION_NUMBER %chin% click_station()),
       clicked_station = click_station(),
       stations_shapefile = stations_sf)
 

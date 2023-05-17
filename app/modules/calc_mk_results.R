@@ -5,12 +5,13 @@ calculate_mk_mod <- function(id, data, user_var_choice) {
     function(input, output, session) {
 
       d_with_mk = reactive({
+        # browser()
         # chosen_variable = user_var_choice()
         chosen_variable = user_var_choice()
         unique_stations = unique(data()$STATION_NUMBER)
 
         # Filter for stations with 3+ records.
-        data = data()[,group_count := .N, by = STATION_NUMBER
+        data = data()[!is.na(values),group_count := .N, by = STATION_NUMBER
                ][group_count >= 3,]
 
         # This chunk does the following things:
