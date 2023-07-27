@@ -16,3 +16,4 @@ recording.log
 shinyloadtesting/**
 data_preprocessing/data/**
 other_data_sets_for_publishing/**
+run_**
