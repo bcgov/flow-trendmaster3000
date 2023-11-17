@@ -3,8 +3,8 @@ filter_data_Mod_UI = function(id){
 
   scale_selector_bit = radioButtons(
     ns('scale_selector_radio'),
-    label = 'Time Scale',
-    choices = c('Annual',
+    label = 'Dates to Include',
+    choices = c('All' = 'Annual',
                 'Monthly',
                 #'Seasonal',
                 'Select Dates'),
@@ -107,7 +107,7 @@ filter_data_Mod_Server = function(id, include_low_qual_data, stations, number_st
       })
 
       # Reactive of user's Time Scale filter choice.
-      # 1. If Annual, no filtering performed.
+      # 1. If All, no filtering performed.
       # 2. If monthly, keeps data only for a given month.
       # 4. If 'Select Dates', keeps data between start month and day and end month and day.
       finegrain_selector_reactive = reactive({
@@ -164,7 +164,7 @@ filter_data_Mod_Server = function(id, include_low_qual_data, stations, number_st
       # flow_dat_all = qs::qread("daily_flow_records.qs")
       flow_dat_all = qs::qread("weekly_flow_records.qs")
 
-      # Annual summaries (one with all available data, one for just 1990 or
+      # All summaries (one with all available data, one for just 1990 or
       # more recent, and one with 2010 or more recent)
       flow_dat_annual = qs::qread("ann_flow_summary.qs")
       flow_dat_annual_1990 = qs::qread("ann_flow_summary_1990.qs")
@@ -175,7 +175,7 @@ filter_data_Mod_Server = function(id, include_low_qual_data, stations, number_st
 
       dat_filtered = reactive({
 
-        # If user has selected 'Annual', rely on presummarized data.
+        # If user has selected 'All', rely on presummarized data.
         # Respond to user period selection (all,1990 - present, or 2010 - present)
         # Pass this on as a data.table
         if(input$scale_selector_radio == 'Annual') {

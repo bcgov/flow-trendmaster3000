@@ -10,8 +10,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and limitations under the License.
 
+
+
+# Here we load in other R scripts that we use in the shiny UI or server code.
+# We split code into multiple scripts like this to keep each R script
+# (hopefully) bite-sized and possible to read / debug.
 source('UI.R')
-# source('UI_base_shiny.R')
 source('utils/stats_funcs.R')
 source('utils/plot_funcs.R')
 source('utils/leafmap_funcs.R')
@@ -20,6 +24,7 @@ source('utils/make_poly_from_drawing.R')
 source('modules/filter_data.R')
 source('modules/add_metric_to_dat.R')
 source('modules/calc_mk_results.R')
+source('modules/access_wsurvey_canada_data.R')
 
 
 server <- function(input, output) {
@@ -99,6 +104,12 @@ server <- function(input, output) {
   mk_results <- calculate_mk_mod('mk_res',
                                  data = dat_with_metric,
                                  user_var_choice = user_var)
+
+  # # Use the detailed data download to snag daily flow records from
+  # # the Water Survey of Canada website.
+  # download_results = access_wsurvey_canada_Server('pull_data',
+  #                                                 station_number_list = c('07EA004','07EA006'))
+
 
   # Attach the MK results to the data with metric.
   flow_dat_with_mk = reactive({
@@ -229,6 +240,7 @@ server <- function(input, output) {
 
   output$selected_station_DT = DT::renderDT({
     DT::datatable(stations_sf_with_trend() |>
+                    dplyr::filter(STATION_NUMBER %in% click_station()) |>
                     st_drop_geometry() |>
                     dplyr::select(STATION_NUMBER,STATION_NAME,
                                   Status = HYD_STATUS, #meets_criteria,
@@ -287,16 +299,22 @@ server <- function(input, output) {
     # 'single station select mode'? If multiple,
     # keep station IDs as we click them.
     if(input$multi_station == T){
-      new_click_station_value = c(click_station(), input$leafmap_marker_click$id)
-      click_station(unique(new_click_station_value[new_click_station_value != 'no_selection']))
+      # Did the user click a station that's already selected? If so, drop that station.
+      if(input$leafmap_marker_click$id %in% click_station()){
+        click_station(click_station()[click_station() != input$leafmap_marker_click$id])
+      } else {
+        new_click_station_value = c(click_station(), input$leafmap_marker_click$id)
+        click_station(unique(new_click_station_value[new_click_station_value != 'no_selection']))
+      }
     } else {
       click_station(input$leafmap_marker_click$id)
     }
-    # Update the tab that is selected, unless we're already
-    # looking at either the flow metric plot or the hydrograph plot.
-   if(!input$tabset %in% c("Flow Metric Plot","Hydrograph"))
-    nav_select('tabset',
-               selected = 'Flow Metric Plot')
+   #  # Update the tab that is selected, unless we're already
+   #  # looking at either the flow metric plot, the hydrograph plot, or
+   #  # tabular data.
+   # if(!input$tabset %in% c("Flow Metric Plot","Hydrograph"))
+   #  nav_select('tabset',
+   #             selected = 'Flow Metric Plot')
   })
 
   # 1. AND/OR Update selection of shape.
@@ -362,21 +380,79 @@ server <- function(input, output) {
                           stations_shapefile = stations_sf_with_trend_in_shape(),
                           slopes = senslope_dat(),
                           caption_label = date_choice_label())
-    ggplotly(p)
+    ggplotly(p, tooltip = c('label'))
   })
 
   output$my_hydrograph = renderPlotly({
+
+    if(is.null(click_stations_ddat$web_download())){
+      data_for_hydrograph = all_flow_records_for_hydrograph |> filter(STATION_NUMBER %chin% click_station())
+    } else {
+      data_for_hydrograph = click_stations_ddat$web_download() |>
+        dplyr::select(-SYM) |>
+        dplyr::mutate(Year = lubridate::year(record_date),
+                      Week = floor(yday(record_date)/7),
+                      Month = lubridate::month(record_date),
+                      Day = lubridate::day(record_date))
+    }
+
     h = hydrograph_plot(
-      dat = all_flow_records_for_hydrograph |> filter(STATION_NUMBER %chin% click_station()),
+      dat = data_for_hydrograph,
       clicked_station = click_station(),
       stations_shapefile = stations_sf)
 
     ggplotly(h)
   })
 
-  # DATA DOWNLOAD #
+  # GET DAILY DATA FROM WSC #
+  # 1. Set up reactive flag for whether or not data's been downloaded.
+  # ddat_downloaded_for_selection = reactiveVal('No')
+
+  output$current_selected_stations = renderUI({
+
+    output_text = paste0(click_station(), collapse = ', ')
+
+    if(str_count(output_text,', ') >= 3){
+      output_text = 'Many!'
+    }
+
+    if('no_selection' %in% click_station()) {
+      output_text = 'None'
+    }
+    tagList(
+      p(paste0("Currently Selected Stations: "),
+             style = 'margin-bottom:0px;text-align:center;display:inline;'),
+      p(paste0(output_text),
+             style = 'margin-bottom:0px;text-align:center;display:inline;color:purple;')
+    )
+  })
+
+  output$current_downloaded_data_UI = renderUI({
+    if(!is.null(click_stations_ddat$web_download())) {
+      text_to_add = unique(click_stations_ddat$web_download()$STATION_NUMBER)
+      # text_to_add = paste0(click_station(), collapse = ', ')
+    } else {
+      text_to_add = "None"
+    }
+    tagList(
+      h5(HTML("Data from WSC Loaded:<br>")),
+      p(text_to_add)
+    )
+  })
+
+  click_stations_ddat = access_wsurvey_canada_Server('pull_data',
+                                                     click_station)
+
+  # RAW DAILY DATA DOWNLOAD #
   output$download_flow_data_ui = renderUI({
-    downloadButton("download_flow_data",paste0("Download Daily Flow Data (",length(click_station()[click_station() != 'no_selection'])," station(s) selected)"))
+    if(is.null(click_stations_ddat$web_download()) == 'No'){
+      div(
+        actionButton("placeholder_download_flow_data",paste0("Download Daily Flow Data for ",length(unique(click_stations_ddat$web_download()$STATION_NUMBER))," loaded station",ifelse(length(unique(click_stations_ddat$web_download()$STATION_NUMBER)) >= 2, '(s)',''))),
+        style = 'color: grey; opacity: 0.1;'
+      )
+    } else {
+      downloadButton("download_flow_data",paste0("Download Daily Flow Data for ",length(unique(click_stations_ddat$web_download()$STATION_NUMBER))," loaded station",ifelse(length(unique(click_stations_ddat$web_download()$STATION_NUMBER)) >= 2, '(s)','')))
+    }
   })
 
   output$download_flow_data <- downloadHandler(
@@ -384,14 +460,19 @@ server <- function(input, output) {
       paste0("HYDAT_flow_data_", Sys.Date(), ".csv")
     },
     content = function(file) {
-      write.csv(filtering_mod_output$dat_filtered() %>%
-                  filter(STATION_NUMBER %in% click_station()), file, row.names = F)
-    }
-  )
 
-  # DATA DOWNLOAD #
+      write.csv(
+          click_stations_ddat$web_download(),
+          file,
+          row.names = F
+      )
+    })
+      # write.csv(filtering_mod_output$dat_filtered() %>%
+      #             filter(STATION_NUMBER %in% click_station()), file, row.names = F)
+
+  # TREND ANALYSIS DOWNLOAD #
   output$download_data_with_results_ui = renderUI({
-    downloadButton("download_data_with_results", paste0("Download Trend Analysis Results (",length(click_station()[click_station() != 'no_selection'])," station(s) selected"))
+    downloadButton("download_data_with_results", paste0("Download Trend Analysis Results (",length(click_station()[click_station() != 'no_selection'])," station",ifelse(length(click_station()[click_station() != 'no_selection']) >= 2, '(s)','')," selected)"))
   })
 
   output$download_data_with_results <- downloadHandler(
@@ -432,6 +513,29 @@ server <- function(input, output) {
                    clicked_shape = click_shape(),
                    pal = mypal())
   })
+
+  runjs('
+bottombar_button_state = "showing";
+
+bottombar_button = document.getElementById("toggle_bottombar");
+bottombar = document.getElementById("trend_selector");
+bottombar.classList.add("bottombar");
+
+bottombar_button.style.left = "-20px";
+
+bottombar_button.addEventListener("click",
+function() {
+    if(bottombar_button_state == "showing"){
+          bottombar.style.transform = "translateY(50%) scale(1, 0)";
+          bottombar_button.style.transform = "rotate(180deg)";
+          bottombar_button_state = "hidden";
+    } else {
+          bottombar.style.transform = "translateY(0%) scale(1, 1)";
+          bottombar_button.style.transform = "rotate(0deg)";
+          bottombar_button_state = "showing";
+    }
+});
+')
 }
 
 # Run the application
