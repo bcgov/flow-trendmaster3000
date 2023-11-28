@@ -16,3 +16,7 @@ recording.log
 shinyloadtesting/**
 data_preprocessing/data/**
 other_data_sets_for_publishing/**
+run_**
+credentials.json
+data_preprocessing/create_creds.R
+/to_do/**
