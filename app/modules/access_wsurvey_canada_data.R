@@ -6,7 +6,7 @@ library(tidyverse)
 access_wsurvey_canada_UI <- function(id) {
   ns <- NS(id)
   tagList(
-    actionButton(ns('search_wsurvey_dat'),'Get Daily Flow Data from WSC\n for select stations'),
+    actionButton(ns('search_wsurvey_dat'),'Get Daily Flow Data from WSC\n for selection'),
   )
 }
 
@@ -17,6 +17,7 @@ access_wsurvey_canada_Server <- function(id, station_number_list) {
 
       # Create blank reactive Val for API flow dat.
       api_flowdat = reactiveVal()
+      stations_already_processed = reactiveVal()
 
       observeEvent(input$search_wsurvey_dat, {
 
@@ -24,62 +25,74 @@ access_wsurvey_canada_Server <- function(id, station_number_list) {
 
         if(stations_to_download[1] != 'no_selection'){
 
-        for(i in 1:length(stations_to_download)) {
+          # # Is this a completely new list of stations? If so, clear out the
+          # # api_flowdat reactiveVal.
+          # if(!is.null(api_flowdat()) & sum(stations_to_download %in% stations_already_processed()) == 0){
+          #   print('cleaning out api_flowdat. New station list!')
+          #   api_flowdat = reactiveVal()
+          # }
 
-          station_number = stations_to_download[i]
-          # station_number = '08CA003' # Discontinued.
-          # station_number = '08CA001' # Discontinued.
-          # station_number = '08DA005' # Active.
+          for(i in 1:length(stations_to_download)){
 
-          shiny::withProgress(
-            message = paste0('Downloading data for ',station_number),
-            detail = "Establishing session...",
-            value = 0, {
+            station_number = stations_to_download[i]
+            print(paste0("Downloading station ",station_number))
 
-              my_session = rvest::session(paste0('https://wateroffice.ec.gc.ca/search/historical_results_e.html?search_type=station_number&station_number=',station_number,'&start_year=1850&end_year=2023&minimum_years=&gross_drainage_operator=%3E&gross_drainage_area=&effective_drainage_operator=%3E&effective_drainage_area='))
+            # Have we already downloaded data for this station? If so, skip.
+            if(!station_number %in% stations_already_processed()){
+              print("Station was not in the already_processed list")
+              shiny::withProgress(
+                message = paste0('Downloading data for ',station_number),
+                detail = "Establishing session...",
+                value = 0, {
 
-              incProgress(1/5, detail = 'session established...')
+                  my_session = rvest::session(paste0('https://wateroffice.ec.gc.ca/search/historical_results_e.html?search_type=station_number&station_number=',station_number,'&start_year=1850&end_year=2023&minimum_years=&gross_drainage_operator=%3E&gross_drainage_area=&effective_drainage_operator=%3E&effective_drainage_area='))
 
-              search_res_page = session_jump_to(my_session, paste0('https://wateroffice.ec.gc.ca/report/data_availability_e.html?type=historical&station=',station_number,'&parameter_type=Flow+and+Level'))
+                  incProgress(1/5, detail = 'session established...')
 
-              download_page = session_jump_to(search_res_page, paste0('https://wateroffice.ec.gc.ca/download/index_e.html?results_type=historical'))
+                  search_res_page = session_jump_to(my_session, paste0('https://wateroffice.ec.gc.ca/report/data_availability_e.html?type=historical&station=',station_number,'&parameter_type=Flow+and+Level'))
 
-              response = session_jump_to(download_page, '/download/report_e.html?dt=dd&df=ddf&md=0&ext=csv&ext=csv')
+                  download_page = session_jump_to(search_res_page, paste0('https://wateroffice.ec.gc.ca/download/index_e.html?results_type=historical'))
 
-              incProgress(1/5, detail = 'navigated to download page...')
+                  response = session_jump_to(download_page, '/download/report_e.html?dt=dd&df=ddf&md=0&ext=csv&ext=csv')
 
-              wsurvey_data = content(response$response, 'text')
+                  incProgress(1/5, detail = 'navigated to download page...')
 
-              # TEST #
-              # stringr::str_trunc(wsurvey_data, 100)
+                  wsurvey_data = content(response$response, 'text')
 
-              incProgress(1/5, detail = 'downloaded data. Parsing...')
+                  # TEST #
+                  # stringr::str_trunc(wsurvey_data, 100)
 
-              # Trim front bit off of data.
-              wsurvey_data = stringr::str_remove(wsurvey_data, '.*PARAM \\= [0-9]+\\)\\r\\n ')
+                  incProgress(1/5, detail = 'downloaded data. Parsing...')
 
-              ws_data_parsed = read_csv(wsurvey_data)
-              # ws_data_parsed = read_csv(substr(wsurvey_data, 78, nchar(wsurvey_data)))
+                  # Trim front bit off of data.
+                  wsurvey_data = stringr::str_remove(wsurvey_data, '.*PARAM \\= [0-9]+\\)\\r\\n ')
 
-              incProgress(1/5, detail = 'Data parsed')
+                  ws_data_parsed = read_csv(wsurvey_data)
+                  # ws_data_parsed = read_csv(substr(wsurvey_data, 78, nchar(wsurvey_data)))
 
-              ws_data_parsed$STATION_NUMBER = station_number
-              ws_data_parsed$ID = NULL
-              ws_data_parsed$record_date = ws_data_parsed$Date
-              ws_data_parsed$Date = NULL
+                  incProgress(1/5, detail = 'Data parsed')
 
-        api_flowdat(dplyr::bind_rows(api_flowdat(), ws_data_parsed))
+                  ws_data_parsed$STATION_NUMBER = station_number
+                  ws_data_parsed$ID = NULL
+                  ws_data_parsed$record_date = ws_data_parsed$Date
+                  ws_data_parsed$Date = NULL
 
-        incProgress(1/5, detail = 'Complete')
+                  api_flowdat(dplyr::bind_rows(api_flowdat(), ws_data_parsed))
 
-          }) # End of withProgress.
-        } # End of for loop.
+                  incProgress(1/5, detail = 'Complete')
+
+                }) # End of withProgress.
+              stations_already_processed(c(stations_already_processed(), station_number))
+            } else {
+              print("Station was already in downloaded pile.")
+            } # End of for loop.
+          }
         }
       })
 
-        # output$number_rows = renderText({nrow(api_flowdat())})
+      # output$number_rows = renderText({nrow(api_flowdat())})
 
-        list(web_download = reactive(api_flowdat()))
+      list(web_download = reactive(api_flowdat()))
     }
   )
 }

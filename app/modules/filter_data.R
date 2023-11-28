@@ -251,7 +251,7 @@ filter_data_Mod_Server = function(id, include_low_qual_data, stations, number_st
         if (nrow(stations() |> distinct()) > number_station_cutoff) {
           showFeedbackWarning(
             inputId = "finegrain_selector",
-            text = paste0("Please use the map to reduce the number of stations for calculations ",
+            text = paste0("Please use the map to reduce the number of stations for calculations to 50 ",
                           "(",nrow(stations() |> distinct())," currently in scope)")
           )
         } else {

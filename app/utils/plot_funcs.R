@@ -1,4 +1,4 @@
-station_flow_plot = function(data,variable_choice,clicked_station,stations_shapefile,slopes,
+station_flow_plot = function(data,variable_choice,parameter_chosen,clicked_station,stations_shapefile,slopes,
                              caption_label){
 
   label.frame = data.frame(varname = c('Median',
@@ -35,6 +35,7 @@ station_flow_plot = function(data,variable_choice,clicked_station,stations_shape
       name_for_plot = paste0("Stations: ",str_flatten_comma(clicked_station))
     }
 
+    # parameter_chosen #
     data |>
       mutate(Slope = round(Slope, 2),
              Statistic = round(Statistic, 2),
@@ -90,15 +91,16 @@ hydrograph_plot = function(dat, clicked_station, stations_shapefile){
       unnest_wider(percentiles) %>%
       mutate(median_line_label = 'Median Flow') %>%
       mutate(fifty_pct_label = '"Normal" range (50%) of flow') %>%
-      mutate(ninety_pct_label = 'Range of 90% of flow')
+      mutate(ninety_pct_label = 'Range of 90% of flow') |>
+      arrange(STATION_NUMBER)
 
     if(!"Day" %in% names(dat)){
       plotting_df = plotting_df |>
-        mutate(date_for_plot = lubridate::ymd(paste0('2023-',Month,'-01')))
+        mutate(date_for_plot = lubridate::ymd(paste0('2020-',Month,'-01')))
     } else {
       plotting_df = plotting_df |>
         # mutate(Day = ) |>
-        mutate(date_for_plot = lubridate::ymd(paste0('2023-',Month,'-',Day)))
+        mutate(date_for_plot = lubridate::ymd(paste0('2020-',Month,'-',Day)))
     }
 
 

@@ -483,9 +483,9 @@ stns_ann_data_qaqc_stations <- hydat_daily_all %>%
 all_stations_annual <- unique(stns_ann_data_all$STATION_NUMBER)
 stations_annual_qaqc_stations = unique(stns_ann_data_qaqc_stations$STATION_NUMBER)
 
-ggplot(stns_ann_data_qaqc_stations, aes(Year,STATION_NUMBER, colour = Median))+
-  geom_point()
-plotly::ggplotly()
+# ggplot(stns_ann_data_qaqc_stations, aes(Year,STATION_NUMBER, colour = Median))+
+  # geom_point()
+# plotly::ggplotly()
 
 remove_custom <- tribble(
   ~STATION_NUMBER, ~Note,
